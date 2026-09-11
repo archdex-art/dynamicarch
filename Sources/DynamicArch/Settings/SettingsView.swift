@@ -158,9 +158,17 @@ private struct AppearanceSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Island") {
-                Toggle("Hide from screen recordings", isOn: $preferences.hideFromScreenCapture)
-                Toggle("Waveform visualiser", isOn: $preferences.mediaVisualizer)
+            Section("Transparency") {
+                Slider(value: $preferences.glassTransparency, in: 0...1) {
+                    Text("Transparency")
+                } minimumValueLabel: {
+                    Image(systemName: "square.fill")
+                } maximumValueLabel: {
+                    Image(systemName: "square.dotted")
+                }
+                Text("How much of the desktop shows through the island. The resting island stays opaque so it still disappears into the bezel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

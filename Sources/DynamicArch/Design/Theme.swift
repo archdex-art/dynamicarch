@@ -104,14 +104,14 @@ struct IslandSurface: View {
         switch Palette.theme {
         case .dark:
             shape
-                .fill(Color.black)
+                .fill(Color.black.opacity(0.70 + 0.30 * (1 - Preferences.shared.glassTransparency)))
                 .overlay { shape.stroke(Palette.hairline, lineWidth: 0.7).opacity(isOpen ? 1 : 0) }
                 .shadow(color: accent.opacity(isOpen ? 0.28 : 0), radius: 26, y: 8)
                 .shadow(color: .black.opacity(isOpen ? 0.55 : 0), radius: 18, y: 10)
 
         case .light:
             shape
-                .fill(Color(white: 0.97))
+                .fill(Color(white: 0.97).opacity(0.74 + 0.26 * (1 - Preferences.shared.glassTransparency)))
                 .overlay {
                     shape.stroke(Color.black.opacity(0.10), lineWidth: 0.8).opacity(isOpen ? 1 : 0)
                 }
@@ -124,35 +124,55 @@ struct IslandSurface: View {
     }
 
     private var glass: some View {
-        ZStack {
-            VisualEffectBackdrop(material: .hudWindow, blending: .behindWindow)
+        // Transparency trades legibility for see-through: 0 is chrome, 1 is as
+        // clear as a blurred backdrop can be.
+        let transparency = min(1, max(0, Preferences.shared.glassTransparency))
+        // A floor on the veil: at full transparency the material matches
+        // whatever is behind it and the island's own content becomes
+        // unreadable, which is a broken state rather than a preference.
+        let veil = 0.12 + 0.38 * (1 - transparency)
+
+        return ZStack {
+            // The real refraction: a behind-window blur samples the desktop and
+            // windows underneath, so the island genuinely carries what is
+            // behind it rather than faking a frosted colour.
+            VisualEffectBackdrop(material: .underWindowBackground,
+                                 blending: .behindWindow,
+                                 emphasized: false)
                 .clipShape(shape)
 
-            // Tint: a hint of the accent so album art and activities bleed into
-            // the material instead of sitting on top of it.
-            shape
-                .fill(
-                    LinearGradient(colors: [Color.white.opacity(0.16), accent.opacity(0.10)],
-                                   startPoint: .top, endPoint: .bottom)
-                )
-                .blendMode(.plusLighter)
+            // Lensing: a second, slightly scaled copy of the same backdrop,
+            // visible only in a band along the edges. Magnifying the blur near
+            // the rim is what an actual thick pane does to whatever is behind
+            // it, and it replaces the old bloom entirely.
+            VisualEffectBackdrop(material: .fullScreenUI,
+                                 blending: .behindWindow,
+                                 emphasized: false)
+                .scaleEffect(x: 1.08, y: 1.14, anchor: .center)
+                .clipShape(shape)
+                .mask {
+                    shape
+                        .stroke(Color.black, lineWidth: 14)
+                        .blur(radius: 5)
+                }
+                .opacity(0.9)
 
-            // No rim: a stroke traces the whole silhouette and reads as a
-            // drawn outline rather than glass. The sense of thickness comes
-            // from the light gathered inside the body instead.
+            // Just enough darkening to keep white text readable, flat rather
+            // than a gradient so there is no hotspot anywhere.
+            shape.fill(Color.black.opacity(veil))
 
-            // Light catching the bottom curvature, which is what sells the
-            // impression of a thick refracting slab.
+            // Thickness, drawn as shadow rather than light: a soft inner
+            // darkening at the very edge reads as a bevelled pane, where a
+            // bright stroke read as an outline and a radial highlight read as
+            // glow.
             shape
-                .fill(
-                    RadialGradient(colors: [.white.opacity(0.22), .clear],
-                                   center: .bottom, startRadius: 0, endRadius: 120)
-                )
-                .blendMode(.plusLighter)
-                .opacity(isOpen ? 1 : 0.4)
+                .stroke(Color.black.opacity(0.22), lineWidth: 6)
+                .blur(radius: 4)
+                .clipShape(shape)
         }
         .compositingGroup()
-        .shadow(color: accent.opacity(isOpen ? 0.30 : 0.10), radius: 24, y: 10)
-        .shadow(color: .black.opacity(isOpen ? 0.35 : 0), radius: 14, y: 8)
+        // No accent bloom: only a contact shadow, so the island sits on the
+        // desktop instead of glowing over it.
+        .shadow(color: .black.opacity(isOpen ? 0.28 : 0), radius: 12, y: 6)
     }
 }

@@ -63,6 +63,10 @@ final class IslandModel {
 
     private(set) var stage: IslandStage = .closed
     var tab: IslandTab = .home
+    /// Direction of the last section change: +1 moved forward (content slides
+    /// in from the right), -1 moved back. Drives the slide transition so a
+    /// swipe and the animation agree.
+    private(set) var tabDirection: Int = 1
     /// Transient thing being shown while closed (volume, battery, track change…).
     var activity: IslandActivity?
     /// True while the pointer is inside the island's hover zone.
@@ -100,6 +104,45 @@ final class IslandModel {
         self.metrics = metrics
         stageSize = CGSize(width: min(metrics.frame.width, Layout.stageWidth),
                            height: Layout.stageHeight)
+    }
+
+    /// Sections the user has actually enabled, in display order.
+    var availableTabs: [IslandTab] {
+        var list: [IslandTab] = [.home]
+        if Preferences.shared.shelfEnabled { list.append(.shelf) }
+        if Preferences.shared.clipboardEnabled { list.append(.clipboard) }
+        if Preferences.shared.calendarEnabled { list.append(.calendar) }
+        if Preferences.shared.mirrorEnabled { list.append(.mirror) }
+        return list
+    }
+
+    /// Moves `offset` sections along, clamped at both ends so a swipe never
+    /// wraps around unexpectedly.
+    func switchTab(by offset: Int) {
+        let tabs = availableTabs
+        guard tabs.count > 1, let index = tabs.firstIndex(of: tab) else { return }
+        let target = index + offset
+        guard target >= 0, target < tabs.count else {
+            Haptics.tick()
+            return
+        }
+        select(tab: tabs[target], direction: offset > 0 ? 1 : -1)
+    }
+
+    func select(tab newTab: IslandTab, direction: Int? = nil) {
+        guard newTab != tab else { return }
+        let tabs = availableTabs
+        let resolved: Int
+        if let direction {
+            resolved = direction
+        } else if let from = tabs.firstIndex(of: tab), let to = tabs.firstIndex(of: newTab) {
+            resolved = to > from ? 1 : -1
+        } else {
+            resolved = 1
+        }
+        tabDirection = resolved
+        Haptics.tap()
+        withAnimation(Motion.section) { tab = newTab }
     }
 
     // MARK: - Layout

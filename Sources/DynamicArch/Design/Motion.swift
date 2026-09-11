@@ -15,6 +15,9 @@ enum Motion {
     static let peek = Animation.spring(response: 0.28, dampingFraction: 0.80, blendDuration: 0.08)
     /// Live activity in/out.
     static let activity = Animation.spring(response: 0.36, dampingFraction: 0.78, blendDuration: 0.10)
+    /// Section changes: a touch longer than a content crossfade so the slide
+    /// reads as movement between pages rather than a flicker.
+    static let section = Animation.spring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)
     /// Content crossfades and small state flips inside the panel.
     static let content = Animation.spring(response: 0.26, dampingFraction: 0.90, blendDuration: 0.06)
     /// Continuous values that must never overshoot (progress bars, levels).
@@ -31,6 +34,16 @@ enum Motion {
                 .combined(with: .offset(y: -6)),
             removal: .scale(scale: 0.94, anchor: .top)
                 .combined(with: .opacity)
+        )
+    }
+
+    /// Pages slide in from the direction of travel and out the opposite way,
+    /// so a two-finger swipe feels like it is dragging the content along.
+    static func sectionSlide(direction: Int) -> AnyTransition {
+        let forward = direction >= 0
+        return .asymmetric(
+            insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
+            removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)
         )
     }
 

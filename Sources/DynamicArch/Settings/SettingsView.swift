@@ -141,8 +141,23 @@ private struct FeatureSettings: View {
                 Toggle("Waveform visualiser", isOn: $preferences.mediaVisualizer)
                 Toggle("Show artwork around the notch while playing", isOn: $preferences.mediaCompactWhilePlaying)
             }
+            Section("Battery") {
+                Toggle("Battery and charging activities", isOn: $preferences.batteryEnabled)
+                Toggle("Charging animation", isOn: $preferences.chargingAnimationEnabled)
+                    .disabled(!preferences.batteryEnabled)
+                Toggle("Low battery alert", isOn: $preferences.lowBatteryAlertEnabled)
+                    .disabled(!preferences.batteryEnabled)
+                Picker("Warn below", selection: $preferences.lowBatteryThreshold) {
+                    ForEach([10, 15, 20, 25, 30, 40, 50], id: \.self) { value in
+                        Text("\(value)%").tag(value)
+                    }
+                }
+                .disabled(!preferences.batteryEnabled || !preferences.lowBatteryAlertEnabled)
+                Text("A second, louder warning follows at a quarter of this level.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("System") {
-                Toggle("Battery and charging", isOn: $preferences.batteryEnabled)
                 Toggle("Bluetooth devices", isOn: $preferences.bluetoothEnabled)
             }
             Section("Notifications & calls") {

@@ -35,22 +35,18 @@ struct ExpandedIslandView: View {
 
     @ViewBuilder
     private var tabContent: some View {
+        let slide = Motion.sectionSlide(direction: model.tabDirection)
         switch model.tab {
         case .home:
-            HomeTabView(model: model, morph: morph)
-                .transition(Motion.contentSwap)
+            HomeTabView(model: model, morph: morph).transition(slide)
         case .shelf:
-            ShelfTabView(model: model)
-                .transition(Motion.contentSwap)
+            ShelfTabView(model: model).transition(slide)
         case .clipboard:
-            ClipboardTabView()
-                .transition(Motion.contentSwap)
+            ClipboardTabView().transition(slide)
         case .calendar:
-            CalendarTabView()
-                .transition(Motion.contentSwap)
+            CalendarTabView().transition(slide)
         case .mirror:
-            MirrorTabView()
-                .transition(Motion.contentSwap)
+            MirrorTabView().transition(slide)
         }
     }
 }
@@ -99,14 +95,7 @@ struct TabRail: View {
     let model: IslandModel
     @Namespace private var indicator
 
-    private var tabs: [IslandTab] {
-        var list: [IslandTab] = [.home]
-        if Preferences.shared.shelfEnabled { list.append(.shelf) }
-        if Preferences.shared.clipboardEnabled { list.append(.clipboard) }
-        if Preferences.shared.calendarEnabled { list.append(.calendar) }
-        if Preferences.shared.mirrorEnabled { list.append(.mirror) }
-        return list
-    }
+    private var tabs: [IslandTab] { model.availableTabs }
 
     var body: some View {
         HStack(spacing: 2) {
@@ -124,11 +113,7 @@ struct TabRail: View {
                         }
                     }
                     .contentShape(Capsule())
-                    .onTapGesture {
-                        guard !selected else { return }
-                        Haptics.tap()
-                        withAnimation(Motion.content) { model.tab = tab }
-                    }
+                    .onTapGesture { model.select(tab: tab) }
                     .help(tab.title)
             }
         }

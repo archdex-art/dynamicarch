@@ -14,10 +14,20 @@ progress bar, shuffle/repeat, and a live waveform. Swipe across the notch to
 change track, scroll down to open.
 
 **Live activities** - Volume, brightness, and keyboard backlight replace the
-system HUD and animate around the camera housing. Charger connect/disconnect,
-low-battery thresholds, Bluetooth and AirPods connections, output-device
-changes, and timers all surface the same way, with priority and coalescing so
-two events never fight over the island.
+system HUD and animate around the camera housing. Bluetooth and AirPods
+connections, output-device changes, and timers surface the same way, with
+priority and coalescing so two events never fight over the island.
+
+**Battery** - Plugging in plays a charging animation: the battery fills to the
+real charge level with a highlight travelling along it, a pulsing bolt, and a
+green bloom, alongside the time to full. Below a threshold you choose
+(default 20 %) the island warns with an amber, breathing battery and the time
+remaining, then once more in red at a quarter of that level. Hysteresis keeps a
+battery hovering on the line from warning twice.
+
+**Gestures** - Two-finger swipe across the open island pages between sections,
+with the content sliding in from the direction of travel; swipe on the resting
+island to change track, scroll down to open, up to close.
 
 **File shelf** - Drag anything onto the notch: files, images, selected text,
 links. Items are copied into the app's own storage, so they keep working after
@@ -26,7 +36,7 @@ them, Quick Look them, or convert them (image formats, PDF, audio extraction,
 video transcode) without leaving the island.
 
 **Clipboard history**, **calendar**, **weather**, **camera mirror**,
-**Shortcuts runner**, and **timers** each get a tab.
+**Shortcuts runner**, and **timers** each get a section.
 
 **Notifications and calls** - With Accessibility access granted, banners are
 mirrored into the island, and incoming calls take it over with working
@@ -41,6 +51,11 @@ Accept/Decline buttons driven through the banner's own controls.
 
 Requires the Xcode Command Line Tools and macOS 15 or later. The result is
 `build/DynamicArch.app`.
+
+Note: the macOS 27 Command Line Tools declare SwiftUI's `@State` and friends as
+macros whose plugin ships only inside Xcode. `build.sh` detects that and falls
+back to the newest installed SDK that still has a working macro plugin, so a
+CLT-only machine keeps building.
 
 ## How it works
 

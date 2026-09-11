@@ -73,6 +73,8 @@ struct CompactIslandView: View {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(tint)
+        case .battery(let level, let state, _):
+            BatteryCapsule(level: level, state: state, height: 15)
         }
     }
 
@@ -111,6 +113,8 @@ struct CompactIslandView: View {
                 RingProgress(fraction: fraction, tint: tint, lineWidth: 2.5)
                     .frame(width: 14, height: 14)
             }
+        case .battery(let level, let state, let detail):
+            BatteryActivityDetail(level: level, state: state, detail: detail)
         }
     }
 }

@@ -32,6 +32,28 @@ struct IslandActivity: Identifiable, Equatable {
         case media(artwork: NSImage?, title: String, artist: String?, tint: Color)
         /// Circular progress (timer).
         case progress(symbol: String, fraction: Double, label: String, tint: Color)
+        /// Battery state with its own animated treatment.
+        case battery(level: Double, state: BatteryState, detail: String?)
+    }
+
+    enum BatteryState: Equatable {
+        case charging
+        case charged
+        case unplugged
+        case low
+        case critical
+
+        var tint: Color {
+            switch self {
+            case .charging, .charged: Palette.positive
+            case .unplugged: Palette.secondaryText
+            case .low: Palette.warning
+            case .critical: Palette.danger
+            }
+        }
+
+        var isCharging: Bool { self == .charging }
+        var isWarning: Bool { self == .low || self == .critical }
     }
 
     let id: UUID
@@ -64,6 +86,10 @@ struct IslandActivity: Identifiable, Equatable {
             return 92
         case .progress:
             return 70
+        case .battery(_, _, let detail):
+            // "Battery Critical" is the longest title; the slot must fit it
+            // even when there is no detail line to widen things.
+            return min(184, 84 + max(CGFloat(detail?.count ?? 0), 17) * 3.6)
         }
     }
 
@@ -73,6 +99,7 @@ struct IslandActivity: Identifiable, Equatable {
         case .badge: 8
         case .media: 10
         case .progress: 8
+        case .battery: 10
         }
     }
 }

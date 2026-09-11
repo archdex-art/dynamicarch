@@ -43,6 +43,10 @@ final class Preferences {
     var hudEnabled = true { didSet { persist(\.hudEnabled) } }
     var suppressSystemHUD = true { didSet { persist(\.suppressSystemHUD) } }
     var batteryEnabled = true { didSet { persist(\.batteryEnabled) } }
+    var chargingAnimationEnabled = true { didSet { persist(\.chargingAnimationEnabled) } }
+    var lowBatteryAlertEnabled = true { didSet { persist(\.lowBatteryAlertEnabled) } }
+    /// Percentage at which the island starts warning. 20 % matches the system.
+    var lowBatteryThreshold = 20 { didSet { persist(\.lowBatteryThreshold) } }
     /// Off by default: registering for Bluetooth events triggers a TCC
     /// prompt, which must never appear unasked at launch.
     var bluetoothEnabled = false { didSet { persist(\.bluetoothEnabled) } }
@@ -82,6 +86,9 @@ final class Preferences {
         \Preferences.hudEnabled: "hudEnabled",
         \Preferences.suppressSystemHUD: "suppressSystemHUD",
         \Preferences.batteryEnabled: "batteryEnabled",
+        \Preferences.chargingAnimationEnabled: "chargingAnimationEnabled",
+        \Preferences.lowBatteryAlertEnabled: "lowBatteryAlertEnabled",
+        \Preferences.lowBatteryThreshold: "lowBatteryThreshold",
         \Preferences.bluetoothEnabled: "bluetoothEnabled",
         \Preferences.mirrorEnabled: "mirrorEnabled",
         \Preferences.notificationsEnabled: "notificationsEnabled",
@@ -113,6 +120,9 @@ final class Preferences {
         hudEnabled = bool("hudEnabled", true)
         suppressSystemHUD = bool("suppressSystemHUD", true)
         batteryEnabled = bool("batteryEnabled", true)
+        chargingAnimationEnabled = bool("chargingAnimationEnabled", true)
+        lowBatteryAlertEnabled = bool("lowBatteryAlertEnabled", true)
+        lowBatteryThreshold = defaults.object(forKey: "lowBatteryThreshold") as? Int ?? 20
         bluetoothEnabled = bool("bluetoothEnabled", false)
         mirrorEnabled = bool("mirrorEnabled", false)
         notificationsEnabled = bool("notificationsEnabled", false)

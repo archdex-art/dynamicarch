@@ -13,6 +13,10 @@ final class PointerTracker {
     private var dragPasteboardChangeCount = NSPasteboard(name: .drag).changeCount
     private var scrollAccumulator: CGFloat = 0
     private var lastScrollTime: TimeInterval = 0
+    /// A trackpad swipe arrives as a burst of events; one gesture must produce
+    /// at most one section change.
+    private var gestureConsumed = false
+    private var lastSwipeTime: TimeInterval = 0
 
     init(model: IslandModel) {
         self.model = model
@@ -86,35 +90,61 @@ final class PointerTracker {
     private func handleScroll(_ event: NSEvent) {
         guard Preferences.shared.gesturesEnabled else { return }
         let location = NSEvent.mouseLocation
-        let onIsland = model.stage == .open
-            ? model.islandScreenRect().contains(location)
+        let isOpen = model.stage == .open
+        let onIsland = isOpen
+            ? model.islandScreenRect().insetBy(dx: -12, dy: -12).contains(location)
             : model.triggerScreenRect().insetBy(dx: -8, dy: -4).contains(location)
         guard onIsland else { return }
 
+        // Trackpad gestures report a phase; a new gesture resets the budget.
+        // A mouse wheel has no phase, so fall back to an idle timeout.
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastScrollTime > 0.35 { scrollAccumulator = 0 }
+        if event.phase.contains(.began) || event.momentumPhase.contains(.began) {
+            scrollAccumulator = 0
+            gestureConsumed = false
+        } else if now - lastScrollTime > 0.30 {
+            scrollAccumulator = 0
+            gestureConsumed = false
+        }
         lastScrollTime = now
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            scrollAccumulator = 0
+            gestureConsumed = false
+            return
+        }
+        // Ignore inertia: the flick has already been acted on.
+        guard !event.momentumPhase.contains(.changed) else { return }
 
-        // Horizontal swipe on the closed island skips tracks; vertical opens
-        // and closes it.
-        if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+        let horizontal = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.2
+
+        if horizontal {
             scrollAccumulator += event.scrollingDeltaX
-            if scrollAccumulator > 28 {
-                scrollAccumulator = 0
-                MediaStore.shared.previousTrack()
-                Haptics.tap()
-            } else if scrollAccumulator < -28 {
-                scrollAccumulator = 0
-                MediaStore.shared.nextTrack()
+            let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 26 : 14
+            guard abs(scrollAccumulator) >= threshold, !gestureConsumed else { return }
+            // Natural direction: swiping left moves forward through sections,
+            // the same way pages move under your fingers.
+            let forward = scrollAccumulator < 0
+            scrollAccumulator = 0
+            gestureConsumed = true
+
+            if isOpen {
+                guard now - lastSwipeTime > 0.18 else { return }
+                lastSwipeTime = now
+                model.switchTab(by: forward ? 1 : -1)
+            } else {
+                forward ? MediaStore.shared.nextTrack() : MediaStore.shared.previousTrack()
                 Haptics.tap()
             }
         } else {
             scrollAccumulator += event.scrollingDeltaY
-            if scrollAccumulator < -22, model.stage != .open {
+            guard !gestureConsumed else { return }
+            if scrollAccumulator < -22, !isOpen {
                 scrollAccumulator = 0
+                gestureConsumed = true
                 model.open()
-            } else if scrollAccumulator > 22, model.stage == .open {
+            } else if scrollAccumulator > 22, isOpen {
                 scrollAccumulator = 0
+                gestureConsumed = true
                 model.close()
             }
         }

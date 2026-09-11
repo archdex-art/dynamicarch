@@ -34,6 +34,11 @@ final class PowerStore {
             return Palette.secondaryText
         }
 
+        @MainActor
+        var isLowBattery: Bool {
+            Int((level * 100).rounded()) <= Preferences.shared.lowBatteryThreshold
+        }
+
         var remainingDescription: String? {
             let minutes = isCharging ? timeToFull : timeToEmpty
             guard minutes > 0 else { return nil }
@@ -46,7 +51,8 @@ final class PowerStore {
     private(set) var snapshot: Snapshot?
     private var runLoopSource: CFRunLoopSource?
     private var lastPluggedIn: Bool?
-    private var lastLowBatteryWarning: Int?
+    private var lowBatteryWarningIssued = false
+    private var criticalWarningIssued = false
 
     private init() {}
 
@@ -103,41 +109,70 @@ final class PowerStore {
 
     private func announce(previous: Snapshot?, next: Snapshot) {
         guard Preferences.shared.batteryEnabled else { return }
+        let percent = Int((next.level * 100).rounded())
 
-        // Charger plugged in or pulled out.
+        // Plugged in or unplugged: the state change itself is the event.
         if let lastPluggedIn, lastPluggedIn != next.isPluggedIn {
-            let title = next.isPluggedIn ? "Charging" : "On Battery"
-            let subtitle = next.remainingDescription.map {
-                next.isPluggedIn ? "\($0) to full" : "\($0) left"
-            } ?? "\(Int(next.level * 100))%"
-            ActivityCenter.shared.present(
-                IslandActivity(kind: .power,
-                               content: .badge(symbol: next.isPluggedIn ? "bolt.fill" : "battery.50",
-                                               image: nil,
-                                               title: title,
-                                               subtitle: subtitle,
-                                               tint: next.isPluggedIn ? Palette.positive : Palette.secondaryText),
-                               duration: 2.8)
-            )
+            if next.isPluggedIn {
+                if Preferences.shared.chargingAnimationEnabled {
+                    present(state: next.level >= 0.995 ? .charged : .charging,
+                            level: next.level,
+                            detail: next.remainingDescription.map { "\($0) to full" },
+                            duration: 3.4)
+                }
+            } else {
+                present(state: next.isLowBattery ? .low : .unplugged,
+                        level: next.level,
+                        detail: next.remainingDescription.map { "\($0) remaining" },
+                        duration: 2.8)
+            }
+            lowBatteryWarningIssued = next.isPluggedIn ? false : lowBatteryWarningIssued
         }
         lastPluggedIn = next.isPluggedIn
 
-        // Low battery thresholds, once each.
-        let percent = Int(next.level * 100)
-        for threshold in [20, 10, 5] where percent <= threshold && !next.isPluggedIn {
-            if lastLowBatteryWarning == threshold { break }
-            lastLowBatteryWarning = threshold
-            ActivityCenter.shared.present(
-                IslandActivity(kind: .battery,
-                               content: .badge(symbol: "battery.25",
-                                               image: nil,
-                                               title: "\(percent)% Battery",
-                                               subtitle: next.remainingDescription.map { "\($0) left" },
-                                               tint: threshold <= 10 ? Palette.danger : Palette.warning),
-                               duration: 3.4)
-            )
-            break
+        // Reaching full while plugged in is worth one quiet confirmation.
+        if next.isPluggedIn, next.level >= 0.995, previous.map({ $0.level < 0.995 }) ?? false {
+            present(state: .charged, level: next.level, detail: nil, duration: 2.6)
         }
-        if next.isPluggedIn { lastLowBatteryWarning = nil }
+
+        guard !next.isPluggedIn, Preferences.shared.lowBatteryAlertEnabled else {
+            if next.isPluggedIn { lowBatteryWarningIssued = false; criticalWarningIssued = false }
+            return
+        }
+
+        // Warning at the user's threshold, then once more at a quarter of it
+        // (floor 5 %), which is where "low" becomes "act now".
+        let threshold = max(5, min(50, Preferences.shared.lowBatteryThreshold))
+        let criticalThreshold = max(3, threshold / 4)
+
+        if percent <= criticalThreshold, !criticalWarningIssued {
+            criticalWarningIssued = true
+            lowBatteryWarningIssued = true
+            present(state: .critical, level: next.level,
+                    detail: next.remainingDescription.map { "\($0) remaining" } ?? "Connect power now",
+                    duration: 4.2)
+        } else if percent <= threshold, !lowBatteryWarningIssued {
+            lowBatteryWarningIssued = true
+            present(state: .low, level: next.level,
+                    detail: next.remainingDescription.map { "\($0) remaining" },
+                    duration: 3.6)
+        } else if percent > threshold + 3 {
+            // Hysteresis: only re-arm once the charge is clearly back above the
+            // threshold, so a battery hovering on the line cannot spam.
+            lowBatteryWarningIssued = false
+            criticalWarningIssued = false
+        }
+    }
+
+    private func present(state: IslandActivity.BatteryState,
+                         level: Double,
+                         detail: String?,
+                         duration: TimeInterval) {
+        ActivityCenter.shared.present(
+            IslandActivity(kind: state.isWarning ? .battery : .power,
+                           content: .battery(level: level, state: state, detail: detail),
+                           duration: duration)
+        )
+        Haptics.tap()
     }
 }

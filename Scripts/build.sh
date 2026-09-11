@@ -9,6 +9,24 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
+
+# The Command Line Tools for macOS 27 declare SwiftUI's @State, @Binding and
+# friends as macros whose plugin (libSwiftUIMacros) ships only inside Xcode.
+# Without it every SwiftUI view fails to compile. When the active SDK is in that
+# state, fall back to the newest installed SDK that still works.
+if [ -z "${SDKROOT:-}" ]; then
+    PLUGIN_DIR="$(dirname "$(xcrun --find swiftc)")/../lib/swift/host/plugins"
+    if [ ! -f "$PLUGIN_DIR/libSwiftUIMacros.dylib" ]; then
+        for CANDIDATE in /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk \
+                         /Library/Developer/CommandLineTools/SDKs/MacOSX26.*.sdk; do
+            if [ -d "$CANDIDATE" ]; then
+                export SDKROOT="$CANDIDATE"
+                echo "==> Using SDK $(basename "$SDKROOT") (active SDK lacks libSwiftUIMacros)"
+                break
+            fi
+        done
+    fi
+fi
 CONFIG="${1:-release}"
 ACTION="${2:-}"
 APP="$ROOT/build/DynamicArch.app"

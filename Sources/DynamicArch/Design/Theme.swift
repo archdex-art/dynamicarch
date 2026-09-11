@@ -83,10 +83,24 @@ struct IslandSurface: View {
     var bottomRadius: CGFloat
     var accent: Color
     var isOpen: Bool
+    /// True when the island is at rest with nothing to show. It then has to be
+    /// literally invisible - a light or glass rim around an empty notch looks
+    /// like a rendering bug, because that is what it is.
+    var isIdle: Bool = false
 
     private var shape: NotchShape { NotchShape(topRadius: topRadius, bottomRadius: bottomRadius) }
 
     var body: some View {
+        if isIdle {
+            // Matches the bezel exactly, on every theme.
+            shape.fill(Color.black)
+        } else {
+            themed
+        }
+    }
+
+    @ViewBuilder
+    private var themed: some View {
         switch Palette.theme {
         case .dark:
             shape

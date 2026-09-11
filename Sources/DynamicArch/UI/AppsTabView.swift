@@ -171,54 +171,63 @@ private struct AppRow: View {
 
             Spacer(minLength: 4)
 
-            // Usage numbers give way to the actions on hover, so the row never
-            // grows or reflows.
-            if hovering {
-                HStack(spacing: 4) {
-                    if !isCritical {
-                        RowButton(symbol: isProtected ? "shield.slash" : "shield",
-                                  tint: Palette.secondaryText,
-                                  help: isProtected ? "Unprotect" : "Protect from bulk quit") {
-                            store.toggleProtection(entry)
-                        }
-                    }
-                    RowButton(symbol: "arrow.up.left.square", tint: Palette.secondaryText, help: "Bring to front") {
-                        store.activate(entry)
-                    }
-                    if !isCritical {
-                        RowButton(symbol: "xmark", tint: Palette.primaryText, help: "Quit (asks to save)") {
-                            store.quit(entry)
-                        }
-                        RowButton(symbol: "bolt.fill",
-                                  tint: isProtected ? Palette.tertiaryText : Palette.danger,
-                                  help: isProtected ? "Protected" : "Force quit") {
-                            guard !isProtected else { return }
-                            withAnimation(Motion.content) { confirming = entry }
-                        }
-                    }
-                }
-            } else {
-                HStack(spacing: 10) {
-                    Text(entry.cpuDescription)
-                        .font(Typography.mono)
-                        .foregroundStyle(entry.cpu > 60 ? Palette.warning : Palette.tertiaryText)
-                        .frame(width: 34, alignment: .trailing)
-                    Text(entry.memoryDescription)
-                        .font(Typography.mono)
-                        .foregroundStyle(entry.memory > 2_000_000_000 ? Palette.warning : Palette.secondaryText)
-                        .frame(width: 58, alignment: .trailing)
-                }
-                .contentTransition(.numericText())
+            // Usage always visible, actions always in the same place. Swapping
+            // the two on hover moved the buttons under a still cursor, which
+            // made it easy to hit force quit on the wrong app.
+            HStack(spacing: 10) {
+                Text(entry.cpuDescription)
+                    .font(Typography.mono)
+                    .foregroundStyle(entry.cpu > 60 ? Palette.warning : Palette.tertiaryText)
+                    .frame(width: 34, alignment: .trailing)
+                Text(entry.memoryDescription)
+                    .font(Typography.mono)
+                    .foregroundStyle(entry.memory > 2_000_000_000 ? Palette.warning : Palette.secondaryText)
+                    .frame(width: 62, alignment: .trailing)
             }
+            .contentTransition(.numericText())
+            .opacity(hovering ? 0.35 : 1)
+
+            HStack(spacing: 5) {
+                RowButton(symbol: isProtected ? "shield.slash" : "shield",
+                          tint: Palette.secondaryText,
+                          help: isProtected ? "Unprotect" : "Protect from bulk quit",
+                          enabled: !isCritical) {
+                    store.toggleProtection(entry)
+                }
+                RowButton(symbol: "arrow.up.left.square",
+                          tint: Palette.secondaryText,
+                          help: "Bring to front",
+                          enabled: true) {
+                    store.activate(entry)
+                }
+                RowButton(symbol: "xmark",
+                          tint: Palette.primaryText,
+                          help: "Quit (asks to save)",
+                          enabled: !isCritical) {
+                    store.quit(entry)
+                }
+                RowButton(symbol: "bolt.fill",
+                          tint: isProtected ? Palette.tertiaryText : Palette.danger,
+                          help: isCritical ? "Required by macOS" : (isProtected ? "Protected" : "Force quit"),
+                          enabled: !isCritical && !isProtected) {
+                    withAnimation(Motion.content) { confirming = entry }
+                }
+            }
+            // Reserved space always; only interactive on the hovered row, so a
+            // stray click cannot reach a neighbour's controls.
+            .opacity(hovering ? 1 : 0)
+            .allowsHitTesting(hovering)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isHung ? Palette.danger.opacity(0.14) : (hovering ? Palette.controlFill : .clear))
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        // Double click brings the app forward; a single click does nothing, so
+        // clicking around the list is never destructive.
         .onTapGesture(count: 2) { store.activate(entry) }
         .animation(Motion.press, value: hovering)
     }
@@ -228,20 +237,26 @@ private struct RowButton: View {
     let symbol: String
     let tint: Color
     let help: String
+    let enabled: Bool
     let action: () -> Void
 
     @State private var hovering = false
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: 21, height: 21)
-            .background(Circle().fill(hovering ? Palette.controlFillHover : Palette.controlFill))
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(enabled ? tint : Palette.tertiaryText)
+            .frame(width: 25, height: 25)
+            .background(Circle().fill(hovering && enabled ? Palette.controlFillHover : Palette.controlFill))
             .contentShape(Circle())
-            .onHover { hovering = $0 }
-            .onTapGesture { Haptics.tap(); action() }
+            .onHover { hovering = enabled && $0 }
+            .onTapGesture {
+                guard enabled else { return }
+                Haptics.tap()
+                action()
+            }
             .help(help)
+            .opacity(enabled ? 1 : 0.45)
     }
 }
 

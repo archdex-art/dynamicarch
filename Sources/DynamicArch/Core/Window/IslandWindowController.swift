@@ -49,10 +49,13 @@ final class IslandWindowController {
     }
 
     static func panelFrame(metrics: ScreenMetrics, stageSize: CGSize) -> CGRect {
-        let width = min(stageSize.width, metrics.frame.width)
-        let height = min(stageSize.height, metrics.frame.height)
-        return CGRect(x: metrics.notchCenterX - width / 2,
-                      y: metrics.frame.maxY - height,
+        // Even width keeps the island's centred frame on whole points, and an
+        // integral origin keeps the shape's edges on pixel boundaries.
+        var width = min(stageSize.width, metrics.frame.width).rounded(.down)
+        if width.truncatingRemainder(dividingBy: 2) != 0 { width -= 1 }
+        let height = min(stageSize.height, metrics.frame.height).rounded(.down)
+        return CGRect(x: (metrics.notchCenterX - width / 2).rounded(),
+                      y: (metrics.frame.maxY - height).rounded(),
                       width: width,
                       height: height)
     }

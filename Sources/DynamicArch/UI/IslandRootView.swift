@@ -28,7 +28,8 @@ struct IslandContainer: View {
             IslandSurface(topRadius: layout.topRadius,
                           bottomRadius: layout.bottomRadius,
                           accent: accent,
-                          isOpen: isOpen)
+                          isOpen: isOpen,
+                          isIdle: model.stage == .closed && model.compactPresentation == .none)
 
             content
                 .frame(width: layout.size.width, height: layout.size.height, alignment: .top)

@@ -115,11 +115,17 @@ final class PointerTracker {
         // Ignore inertia: the flick has already been acted on.
         guard !event.momentumPhase.contains(.changed) else { return }
 
-        let horizontal = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.2
+        // Sensitivity is deliberately asymmetric. Paging sections is a
+        // destructive-feeling action in the middle of reading a list, so it
+        // demands a clearly horizontal, clearly intentional swipe; scrolling a
+        // list must never page or collapse anything.
+        let precise = event.hasPreciseScrollingDeltas
+        let horizontal = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 2.5
+        let scrollableSection = isOpen && model.tab.hasScrollableContent
 
         if horizontal {
             scrollAccumulator += event.scrollingDeltaX
-            let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 26 : 14
+            let threshold: CGFloat = precise ? (isOpen ? 90 : 40) : 20
             guard abs(scrollAccumulator) >= threshold, !gestureConsumed else { return }
             // Natural direction: swiping left moves forward through sections,
             // the same way pages move under your fingers.
@@ -128,25 +134,42 @@ final class PointerTracker {
             gestureConsumed = true
 
             if isOpen {
-                guard now - lastSwipeTime > 0.18 else { return }
+                guard now - lastSwipeTime > 0.45 else { return }
                 lastSwipeTime = now
                 model.switchTab(by: forward ? 1 : -1)
             } else {
                 forward ? MediaStore.shared.nextTrack() : MediaStore.shared.previousTrack()
                 Haptics.tap()
             }
-        } else {
-            scrollAccumulator += event.scrollingDeltaY
-            guard !gestureConsumed else { return }
-            if scrollAccumulator < -22, !isOpen {
-                scrollAccumulator = 0
-                gestureConsumed = true
-                model.open()
-            } else if scrollAccumulator > 22, isOpen {
-                scrollAccumulator = 0
-                gestureConsumed = true
-                model.close()
-            }
+            return
         }
+
+        guard abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else { return }
+
+        // Inside a scrollable section the list keeps the gesture, unless the
+        // swipe starts on the header strip - which is the one place there is
+        // nothing to scroll.
+        if scrollableSection, !onHeaderStrip(location) { return }
+
+        scrollAccumulator += event.scrollingDeltaY
+        guard !gestureConsumed else { return }
+        let openThreshold: CGFloat = precise ? 34 : 14
+        let closeThreshold: CGFloat = precise ? 70 : 24
+        if scrollAccumulator < -openThreshold, !isOpen {
+            scrollAccumulator = 0
+            gestureConsumed = true
+            model.open()
+        } else if scrollAccumulator > closeThreshold, isOpen {
+            scrollAccumulator = 0
+            gestureConsumed = true
+            model.close()
+        }
+    }
+
+    /// The strip level with the notch, where the island's header lives.
+    private func onHeaderStrip(_ location: CGPoint) -> Bool {
+        let island = model.islandScreenRect()
+        let headerHeight = (model.metrics?.restingSize.height ?? 32) + 4
+        return location.y >= island.maxY - headerHeight
     }
 }

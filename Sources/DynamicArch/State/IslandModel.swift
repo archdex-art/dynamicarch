@@ -29,6 +29,15 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Sections that own a scroll view. A two-finger scroll there must move
+    /// their content, never collapse the island.
+    var hasScrollableContent: Bool {
+        switch self {
+        case .apps, .clipboard, .calendar: true
+        case .home, .shelf, .mirror: false
+        }
+    }
+
     var title: String {
         switch self {
         case .home: "Home"
@@ -181,6 +190,17 @@ final class IslandModel {
         return .none
     }
 
+    /// Sizes are rounded to even numbers: the island is centred by halving its
+    /// width, and an odd width puts its edges on half-points where the two
+    /// inverted corners no longer rasterise identically.
+    private static func aligned(_ size: CGSize) -> CGSize {
+        func even(_ value: CGFloat) -> CGFloat {
+            let rounded = value.rounded()
+            return rounded.truncatingRemainder(dividingBy: 2) == 0 ? rounded : rounded + 1
+        }
+        return CGSize(width: even(size.width), height: size.height.rounded())
+    }
+
     var layout: IslandLayout {
         guard let metrics else {
             return IslandLayout(size: .init(width: 190, height: 32), topRadius: 8, bottomRadius: 14)
@@ -192,23 +212,23 @@ final class IslandModel {
             switch compactPresentation {
             case .activity(let activity):
                 let extra = activity.compactSideWidth
-                return IslandLayout(size: CGSize(width: resting.width + extra * 2,
-                                                 height: resting.height + activity.compactHeightBump),
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + extra * 2,
+                                                 height: resting.height + activity.compactHeightBump)),
                                     topRadius: metrics.hasHardwareNotch ? 10 : 12,
-                                    bottomRadius: resting.height / 2 + 4)
+                                    bottomRadius: (resting.height / 2 + 4).rounded())
             case .media:
-                return IslandLayout(size: CGSize(width: resting.width + 74, height: resting.height + 4),
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + 74, height: resting.height + 4)),
                                     topRadius: metrics.hasHardwareNotch ? 8 : 12,
-                                    bottomRadius: resting.height / 2 + 2)
+                                    bottomRadius: (resting.height / 2 + 2).rounded())
             case .none:
-                return IslandLayout(size: resting,
+                return IslandLayout(size: Self.aligned(resting),
                                     topRadius: metrics.hasHardwareNotch ? 6 : 10,
-                                    bottomRadius: metrics.hasHardwareNotch ? 12 : resting.height / 2)
+                                    bottomRadius: metrics.hasHardwareNotch ? 12 : (resting.height / 2).rounded())
             }
         case .peek:
             let width = resting.width + 86
             let height = resting.height + 14
-            return IslandLayout(size: CGSize(width: width, height: height),
+            return IslandLayout(size: Self.aligned(CGSize(width: width, height: height)),
                                 topRadius: 12,
                                 bottomRadius: height / 2)
 
@@ -219,7 +239,7 @@ final class IslandModel {
             default: Layout.openTallHeight
             }
             let width = Layout.openWidth
-            return IslandLayout(size: CGSize(width: width, height: height),
+            return IslandLayout(size: Self.aligned(CGSize(width: width, height: height)),
                                 topRadius: 14,
                                 bottomRadius: 30)
         }
@@ -228,8 +248,8 @@ final class IslandModel {
     /// Island rect inside the stage view (AppKit coordinates, origin bottom-left).
     func islandRect(inStage bounds: CGRect) -> CGRect {
         let size = layout.size
-        return CGRect(x: (bounds.width - size.width) / 2,
-                      y: bounds.height - size.height,
+        return CGRect(x: ((bounds.width - size.width) / 2).rounded(),
+                      y: (bounds.height - size.height).rounded(),
                       width: size.width,
                       height: size.height)
     }
@@ -253,8 +273,8 @@ final class IslandModel {
     func islandScreenRect() -> CGRect {
         guard let metrics else { return .zero }
         let size = layout.size
-        return CGRect(x: metrics.notchCenterX - size.width / 2,
-                      y: metrics.frame.maxY - size.height,
+        return CGRect(x: (metrics.notchCenterX - size.width / 2).rounded(),
+                      y: (metrics.frame.maxY - size.height).rounded(),
                       width: size.width,
                       height: size.height)
     }

@@ -158,15 +158,8 @@ private struct AppearanceSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Transparency") {
-                Slider(value: $preferences.glassTransparency, in: 0...1) {
-                    Text("Transparency")
-                } minimumValueLabel: {
-                    Image(systemName: "square.fill")
-                } maximumValueLabel: {
-                    Image(systemName: "square.dotted")
-                }
-                Text("How much of the desktop shows through the island. The resting island stays opaque so it still disappears into the bezel.")
+            Section {
+                Text("Glass uses the same material as the Dock, so the island picks up whatever is behind it without any tint of its own.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -31,8 +31,6 @@ final class Preferences {
     var activitiesEnabled = true { didSet { persist(\.activitiesEnabled) } }
     var gesturesEnabled = true { didSet { persist(\.gesturesEnabled) } }
     var hideFromScreenCapture = false { didSet { persist(\.hideFromScreenCapture) } }
-    /// 0 = solid chrome, 1 = as see-through as the material allows.
-    var glassTransparency: Double = 0.65 { didSet { persist(\.glassTransparency) } }
     var theme: IslandTheme = .dark {
         didSet {
             // Mirror into the palette so every view - and the panel itself -
@@ -99,7 +97,6 @@ final class Preferences {
         \Preferences.gesturesEnabled: "gesturesEnabled",
         \Preferences.hideFromScreenCapture: "hideFromScreenCapture",
         \Preferences.theme: "theme",
-        \Preferences.glassTransparency: "glassTransparency",
         \Preferences.appsEnabled: "appsEnabled",
         \Preferences.autoQuitIdleMinutes: "autoQuitIdleMinutes",
         \Preferences.mediaEnabled: "mediaEnabled",
@@ -136,7 +133,6 @@ final class Preferences {
         activitiesEnabled = bool("activitiesEnabled", true)
         gesturesEnabled = bool("gesturesEnabled", true)
         hideFromScreenCapture = bool("hideFromScreenCapture", false)
-        glassTransparency = defaults.object(forKey: "glassTransparency") as? Double ?? 0.65
         theme = (defaults.string(forKey: "theme").flatMap(IslandTheme.init)) ?? .dark
         Palette.theme = theme
         appsEnabled = bool("appsEnabled", true)

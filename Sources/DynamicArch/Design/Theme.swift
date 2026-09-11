@@ -137,16 +137,9 @@ struct IslandSurface: View {
                 )
                 .blendMode(.plusLighter)
 
-            // Specular edge, brightest along the top where light would hit.
-            shape
-                .stroke(
-                    LinearGradient(stops: [
-                        .init(color: .white.opacity(0.55), location: 0),
-                        .init(color: .white.opacity(0.12), location: 0.45),
-                        .init(color: .white.opacity(0.30), location: 1)
-                    ], startPoint: .top, endPoint: .bottom),
-                    lineWidth: 0.9
-                )
+            // No rim: a stroke traces the whole silhouette and reads as a
+            // drawn outline rather than glass. The sense of thickness comes
+            // from the light gathered inside the body instead.
 
             // Light catching the bottom curvature, which is what sells the
             // impression of a thick refracting slab.

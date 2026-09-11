@@ -2,11 +2,12 @@ import SwiftUI
 
 struct SettingsView: View {
     enum Section: String, CaseIterable, Identifiable {
-        case general, features, shelf, about
+        case general, appearance, features, shelf, about
         var id: String { rawValue }
         var title: String {
             switch self {
             case .general: "General"
+            case .appearance: "Appearance"
             case .features: "Features"
             case .shelf: "Shelf"
             case .about: "About"
@@ -15,6 +16,7 @@ struct SettingsView: View {
         var symbol: String {
             switch self {
             case .general: "gearshape"
+            case .appearance: "paintpalette"
             case .features: "square.grid.2x2"
             case .shelf: "tray.full"
             case .about: "info.circle"
@@ -48,6 +50,7 @@ struct SettingsView: View {
             Group {
                 switch section {
                 case .general: GeneralSettings(preferences: preferences, permissions: $permissions)
+                case .appearance: AppearanceSettings(preferences: preferences)
                 case .features: FeatureSettings(preferences: preferences, permissions: $permissions)
                 case .shelf: ShelfSettings(preferences: preferences)
                 case .about: AboutSettings()
@@ -130,6 +133,99 @@ private struct GeneralSettings: View {
     }
 }
 
+/// Theme picker with live previews, so the choice is made by looking rather
+/// than by reading.
+private struct AppearanceSettings: View {
+    @Bindable var preferences: Preferences
+
+    var body: some View {
+        Form {
+            Section("Theme") {
+                HStack(spacing: 12) {
+                    ForEach(IslandTheme.allCases) { theme in
+                        ThemeSwatch(theme: theme, selected: preferences.theme == theme) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                                preferences.theme = theme
+                            }
+                            Services.shared.refresh()
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+
+                Text(preferences.theme.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Island") {
+                Toggle("Hide from screen recordings", isOn: $preferences.hideFromScreenCapture)
+                Toggle("Waveform visualiser", isOn: $preferences.mediaVisualizer)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct ThemeSwatch: View {
+    let theme: IslandTheme
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(background)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.12),
+                                          lineWidth: selected ? 2 : 1)
+                    }
+                if theme == .glass {
+                    // Hint of what glass does: a bright rim over a blurred
+                    // gradient, the same recipe as the real surface.
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(colors: [.white.opacity(0.8), .white.opacity(0.15)],
+                                           startPoint: .top, endPoint: .bottom),
+                            lineWidth: 1
+                        )
+                        .padding(3)
+                }
+                Capsule()
+                    .fill(theme == .light ? Color.black.opacity(0.75) : Color.white.opacity(0.85))
+                    .frame(width: 34, height: 9)
+                Image(systemName: theme.symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(theme == .light ? .black : .white)
+                    .offset(y: 20)
+            }
+            .frame(width: 92, height: 62)
+
+            Text(theme.title)
+                .font(.caption)
+                .foregroundStyle(selected ? .primary : .secondary)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+    }
+
+    private var background: AnyShapeStyle {
+        switch theme {
+        case .dark:
+            AnyShapeStyle(Color.black)
+        case .light:
+            AnyShapeStyle(Color(white: 0.95))
+        case .glass:
+            AnyShapeStyle(
+                LinearGradient(colors: [Color.teal.opacity(0.55), Color.purple.opacity(0.45)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+        }
+    }
+}
+
 private struct FeatureSettings: View {
     @Bindable var preferences: Preferences
     @Binding var permissions: PermissionSnapshot
@@ -175,6 +271,27 @@ private struct FeatureSettings: View {
                             permissions.refresh()
                         }
                     }
+                }
+            }
+            Section("Running apps") {
+                Toggle("Apps section", isOn: $preferences.appsEnabled)
+                Picker("Quit idle apps after", selection: $preferences.autoQuitIdleMinutes) {
+                    Text("Never").tag(0)
+                    Text("15 minutes").tag(15)
+                    Text("30 minutes").tag(30)
+                    Text("1 hour").tag(60)
+                    Text("3 hours").tag(180)
+                }
+                .disabled(!preferences.appsEnabled)
+                Text("Idle apps are always quit the normal way, so they can still ask you to save. Protected and system apps are never touched.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !preferences.protectedBundleIdentifiers.isEmpty {
+                    LabeledContent("Protected") {
+                        Text("\(preferences.protectedBundleIdentifiers.count) app\(preferences.protectedBundleIdentifiers.count == 1 ? "" : "s")")
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Clear protected apps") { preferences.protectedBundleIdentifiers = [] }
                 }
             }
             Section("Panels") {

@@ -61,6 +61,11 @@ final class IslandWindowController {
         panel.setFrame(Self.panelFrame(metrics: metrics, stageSize: model.stageSize), display: true)
     }
 
+    func applyTheme() {
+        panel.appearance = NSAppearance(named: Preferences.shared.theme.appearance)
+        panel.contentView?.needsDisplay = true
+    }
+
     func updateCaptureVisibility() {
         panel.sharingType = Preferences.shared.hideFromScreenCapture ? .none : .readOnly
     }

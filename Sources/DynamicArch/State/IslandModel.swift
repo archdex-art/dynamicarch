@@ -14,7 +14,7 @@ enum IslandStage: Equatable {
 }
 
 enum IslandTab: String, CaseIterable, Identifiable, Codable {
-    case home, shelf, clipboard, calendar, mirror
+    case home, shelf, apps, clipboard, calendar, mirror
 
     var id: String { rawValue }
 
@@ -22,6 +22,7 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .home: "rectangle.on.rectangle.angled"
         case .shelf: "tray.full"
+        case .apps: "square.stack.3d.up"
         case .clipboard: "doc.on.clipboard"
         case .calendar: "calendar"
         case .mirror: "web.camera"
@@ -32,6 +33,7 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .home: "Home"
         case .shelf: "Shelf"
+        case .apps: "Apps"
         case .clipboard: "Clipboard"
         case .calendar: "Calendar"
         case .mirror: "Mirror"
@@ -110,6 +112,7 @@ final class IslandModel {
     var availableTabs: [IslandTab] {
         var list: [IslandTab] = [.home]
         if Preferences.shared.shelfEnabled { list.append(.shelf) }
+        if Preferences.shared.appsEnabled { list.append(.apps) }
         if Preferences.shared.clipboardEnabled { list.append(.clipboard) }
         if Preferences.shared.calendarEnabled { list.append(.calendar) }
         if Preferences.shared.mirrorEnabled { list.append(.mirror) }
@@ -153,6 +156,7 @@ final class IslandModel {
         static let openWidth: CGFloat = 620
         static let openHeight: CGFloat = 188
         static let openTallHeight: CGFloat = 236
+        static let openExtraTallHeight: CGFloat = 292
         /// Extra slop around the island where the pointer still counts as "on" it.
         static let hoverSlop: CGFloat = 6
         /// Slop before an open island auto-closes.
@@ -209,7 +213,11 @@ final class IslandModel {
                                 bottomRadius: height / 2)
 
         case .open:
-            let height = tab == .home ? Layout.openHeight : Layout.openTallHeight
+            let height = switch tab {
+            case .home: Layout.openHeight
+            case .apps: Layout.openExtraTallHeight
+            default: Layout.openTallHeight
+            }
             let width = Layout.openWidth
             return IslandLayout(size: CGSize(width: width, height: height),
                                 topRadius: 14,

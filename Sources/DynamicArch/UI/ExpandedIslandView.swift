@@ -41,6 +41,8 @@ struct ExpandedIslandView: View {
             HomeTabView(model: model, morph: morph).transition(slide)
         case .shelf:
             ShelfTabView(model: model).transition(slide)
+        case .apps:
+            AppsTabView(model: model).transition(slide)
         case .clipboard:
             ClipboardTabView().transition(slide)
         case .calendar:

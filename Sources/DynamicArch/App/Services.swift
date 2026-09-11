@@ -20,6 +20,7 @@ final class Services {
         pointer?.start()
         model.startInteractivityGuard()
 
+        AppsStore.shared.start()
         ShelfStore.shared.start()
         ShelfStore.shared.validate()
 
@@ -43,6 +44,7 @@ final class Services {
     func refresh() {
         let preferences = Preferences.shared
         displays?.updateCaptureVisibility()
+        displays?.applyTheme()
 
         preferences.mediaEnabled ? MediaStore.shared.start() : MediaStore.shared.stop()
 
@@ -74,6 +76,7 @@ final class Services {
         CalendarStore.shared.stop()
         WeatherStore.shared.stop()
         ShelfStore.shared.stop()
+        AppsStore.shared.stop()
         NotificationMirror.shared.stop()
     }
 }

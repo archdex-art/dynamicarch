@@ -55,20 +55,27 @@ struct VisualEffectBackdrop: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
     var blending: NSVisualEffectView.BlendingMode = .behindWindow
     var emphasized = true
+    /// Set explicitly: a visual effect view resolves its vibrancy from its own
+    /// `effectiveAppearance`, which does not follow SwiftUI's colour scheme, so
+    /// without this a dark material renders as a light one.
+    var appearanceName: NSAppearance.Name = .darkAqua
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blending
+        apply(to: view)
         view.state = .active
-        view.isEmphasized = emphasized
         return view
     }
 
     func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        apply(to: view)
+    }
+
+    private func apply(to view: NSVisualEffectView) {
         view.material = material
         view.blendingMode = blending
         view.isEmphasized = emphasized
+        view.appearance = NSAppearance(named: appearanceName)
     }
 }
 
@@ -131,8 +138,14 @@ struct IslandSurface: View {
         ZStack {
             VisualEffectBackdrop(material: .hudWindow,
                                  blending: .behindWindow,
-                                 emphasized: false)
+                                 emphasized: false,
+                                 appearanceName: Palette.theme.isLight ? .aqua : .darkAqua)
                 .clipShape(shape)
+
+            // The Dock does not merely blur what is behind it, it sits over it
+            // with a definite density. Without this the island reads as a
+            // washed-out pane of the wallpaper's own colour.
+            shape.fill(Color.black.opacity(0.22))
 
             // The Dock's hairline: a single hair of light, an order of
             // magnitude fainter than a specular rim, and uniform rather than

@@ -58,10 +58,13 @@ Three looks, switchable live in Settings → Appearance:
 - **Dark** - black chrome that is indistinguishable from the bezel, so the
   island vanishes when idle.
 - **Light** - bright chrome with dark text for light desktops.
-- **Glass** - a behind-window blur that genuinely refracts the desktop and
-  windows underneath, layered with a faint accent tint, a specular top edge and
-  a light catch along the bottom curvature, in the spirit of the macOS Tahoe
-  material.
+- **Glass** - the Dock's own material: a behind-window blur of the desktop and
+  windows underneath, a scrim for density, and a single hair of light around
+  the edge. Nothing is added on top, which is why it reads as a pane rather
+  than a glowing panel - the island simply takes on whatever is behind it.
+
+At rest the island is flat black on every theme, so it still disappears into
+the bezel instead of outlining an empty notch.
 
 ## Build
 

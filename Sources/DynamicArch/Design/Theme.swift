@@ -9,9 +9,6 @@ enum IslandTheme: String, CaseIterable, Identifiable, Codable {
     /// Translucent glass that refracts whatever is behind the island, in the
     /// spirit of the macOS Tahoe material.
     case glass
-    /// Monochrome dot-matrix chrome in the spirit of Nothing OS: pure black,
-    /// one red accent, and a dot grid that lights up as the island opens.
-    case nothing
 
     var id: String { rawValue }
 
@@ -20,7 +17,6 @@ enum IslandTheme: String, CaseIterable, Identifiable, Codable {
         case .dark: "Dark"
         case .light: "Light"
         case .glass: "Glass"
-        case .nothing: "Nothing"
         }
     }
 
@@ -29,7 +25,6 @@ enum IslandTheme: String, CaseIterable, Identifiable, Codable {
         case .dark: "moon.fill"
         case .light: "sun.max.fill"
         case .glass: "drop.halffull"
-        case .nothing: "circle.grid.3x3.fill"
         }
     }
 
@@ -38,7 +33,6 @@ enum IslandTheme: String, CaseIterable, Identifiable, Codable {
         case .dark: "Matches the bezel - the island disappears when idle."
         case .light: "Bright chrome with dark text."
         case .glass: "The Dock's material: the desktop showing through, nothing added."
-        case .nothing: "Dot-matrix monochrome with a red accent; opens as a grid of dots."
         }
     }
 
@@ -47,7 +41,7 @@ enum IslandTheme: String, CaseIterable, Identifiable, Codable {
     var appearance: NSAppearance.Name {
         switch self {
         case .light: .aqua
-        case .dark, .glass, .nothing: .darkAqua
+        case .dark, .glass: .darkAqua
         }
     }
 
@@ -96,9 +90,6 @@ struct IslandSurface: View {
     var bottomRadius: CGFloat
     var accent: Color
     var isOpen: Bool
-    /// Drives the Nothing theme's dot reveal: one animated number, so the grid
-    /// interpolates with the island's own spring instead of its own timer.
-    var revealProgress: Double = 1
     /// True when the island is at rest with nothing to show. It then has to be
     /// literally invisible - a light or glass rim around an empty notch looks
     /// like a rendering bug, because that is what it is.
@@ -136,24 +127,7 @@ struct IslandSurface: View {
 
         case .glass:
             glass
-
-        case .nothing:
-            nothing
         }
-    }
-
-    /// Nothing OS: pure black, a faint dot matrix, one hair of light, and the
-    /// red accent used only where something is actually happening.
-    private var nothing: some View {
-        ZStack {
-            shape.fill(Color.black)
-            DotGridReveal(progress: revealProgress,
-                          restOpacity: isOpen ? 0.12 : 0.06)
-                .clipShape(shape)
-            shape.stroke(Palette.hairline, lineWidth: 0.6)
-        }
-        .compositingGroup()
-        .shadow(color: .black.opacity(isOpen ? 0.5 : 0), radius: 16, y: 8)
     }
 
     /// Modelled directly on the Dock: one behind-window blur of the desktop, a

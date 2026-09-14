@@ -20,16 +20,6 @@ struct IslandContainer: View {
 
     private var layout: IslandLayout { model.layout }
 
-    /// The reveal runs whenever the island is showing anything at all: rest is
-    /// dark, peek is half lit, open is the full grid.
-    private var reveal: Double {
-        switch model.stage {
-        case .closed: model.compactPresentation == .none ? 0 : 0.55
-        case .peek: 0.7
-        case .open: 1
-        }
-    }
-
     var body: some View {
         let accent = model.media.track?.accent ?? Palette.accent
         let isOpen = model.stage == .open
@@ -39,7 +29,6 @@ struct IslandContainer: View {
                           bottomRadius: layout.bottomRadius,
                           accent: accent,
                           isOpen: isOpen,
-                          revealProgress: reveal,
                           isIdle: model.stage == .closed && model.compactPresentation == .none)
 
             content

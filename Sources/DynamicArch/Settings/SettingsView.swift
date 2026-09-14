@@ -183,6 +183,10 @@ private struct ThemeSwatch: View {
                             .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.12),
                                           lineWidth: selected ? 2 : 1)
                     }
+                if theme == .nothing {
+                    DotGridReveal(progress: 1, spacing: 7, dotSize: 1.4, restOpacity: 0.22)
+                        .padding(4)
+                }
                 if theme == .glass {
                     // Hint of what glass does: a bright rim over a blurred
                     // gradient, the same recipe as the real surface.
@@ -195,7 +199,9 @@ private struct ThemeSwatch: View {
                         .padding(3)
                 }
                 Capsule()
-                    .fill(theme == .light ? Color.black.opacity(0.75) : Color.white.opacity(0.85))
+                    .fill(theme == .nothing
+                          ? Palette.nothingRed
+                          : (theme == .light ? Color.black.opacity(0.75) : Color.white.opacity(0.85)))
                     .frame(width: 34, height: 9)
                 Image(systemName: theme.symbol)
                     .font(.system(size: 11, weight: .semibold))
@@ -223,6 +229,8 @@ private struct ThemeSwatch: View {
                 LinearGradient(colors: [Color.teal.opacity(0.55), Color.purple.opacity(0.45)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             )
+        case .nothing:
+            AnyShapeStyle(Color.black)
         }
     }
 }
@@ -296,6 +304,7 @@ private struct FeatureSettings: View {
                 }
             }
             Section("Panels") {
+                Toggle("Timer", isOn: $preferences.timerEnabled)
                 Toggle("File shelf", isOn: $preferences.shelfEnabled)
                 Toggle("Clipboard history", isOn: $preferences.clipboardEnabled)
                 Toggle("Calendar", isOn: $preferences.calendarEnabled)

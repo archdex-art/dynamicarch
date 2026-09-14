@@ -21,6 +21,7 @@ final class Services {
         model.startInteractivityGuard()
 
         AppsStore.shared.start()
+        TimerStore.shared.start()
         ShelfStore.shared.start()
         ShelfStore.shared.validate()
 
@@ -77,6 +78,7 @@ final class Services {
         WeatherStore.shared.stop()
         ShelfStore.shared.stop()
         AppsStore.shared.stop()
+        TimerStore.shared.stop()
         NotificationMirror.shared.stop()
     }
 }

@@ -155,6 +155,25 @@ final class PointerTracker {
         guard !gestureConsumed else { return }
         let openThreshold: CGFloat = precise ? 34 : 14
         let closeThreshold: CGFloat = precise ? 70 : 24
+
+        // Collapse chain: swiping up from the collapsed timer takes it down to
+        // the bar, swiping down brings it back. Only ever a visual change - the
+        // timer itself is untouched.
+        if !isOpen, TimerStore.shared.state.isVisible, Preferences.shared.timerEnabled {
+            if scrollAccumulator > closeThreshold, !model.timerMinimal {
+                scrollAccumulator = 0
+                gestureConsumed = true
+                model.setTimerMinimal(true)
+                return
+            }
+            if scrollAccumulator < -openThreshold, model.timerMinimal {
+                scrollAccumulator = 0
+                gestureConsumed = true
+                model.setTimerMinimal(false)
+                return
+            }
+        }
+
         if scrollAccumulator < -openThreshold, !isOpen {
             scrollAccumulator = 0
             gestureConsumed = true

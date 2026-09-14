@@ -59,6 +59,7 @@ final class Preferences {
     /// prompt, which must never appear unasked at launch.
     var bluetoothEnabled = false { didSet { persist(\.bluetoothEnabled) } }
     var mirrorEnabled = false { didSet { persist(\.mirrorEnabled) } }
+    var timerEnabled = true { didSet { persist(\.timerEnabled) } }
     var appsEnabled = true { didSet { persist(\.appsEnabled) } }
     /// Apps that bulk quit and force quit must never touch.
     var protectedBundleIdentifiers: [String] = [] {
@@ -114,6 +115,7 @@ final class Preferences {
         \Preferences.lowBatteryThreshold: "lowBatteryThreshold",
         \Preferences.bluetoothEnabled: "bluetoothEnabled",
         \Preferences.mirrorEnabled: "mirrorEnabled",
+        \Preferences.timerEnabled: "timerEnabled",
         \Preferences.notificationsEnabled: "notificationsEnabled",
         \Preferences.dismissSystemBanners: "dismissSystemBanners",
         \Preferences.shelfRetentionHours: "shelfRetentionHours",
@@ -153,6 +155,7 @@ final class Preferences {
         lowBatteryThreshold = defaults.object(forKey: "lowBatteryThreshold") as? Int ?? 20
         bluetoothEnabled = bool("bluetoothEnabled", false)
         mirrorEnabled = bool("mirrorEnabled", false)
+        timerEnabled = bool("timerEnabled", true)
         notificationsEnabled = bool("notificationsEnabled", false)
         dismissSystemBanners = bool("dismissSystemBanners", false)
         shelfRetentionHours = defaults.object(forKey: "shelfRetentionHours") as? Int ?? 24

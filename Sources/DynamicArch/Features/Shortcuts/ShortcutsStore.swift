@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// Runs the user's own Shortcuts from the island. Enumerated through the
 /// `shortcuts` CLI that ships with macOS, so there is nothing to configure.
@@ -8,16 +9,25 @@ final class ShortcutsStore {
     static let shared = ShortcutsStore()
 
     private(set) var names: [String] = []
+    private(set) var isLoading = false
     private(set) var pinned: [String] = UserDefaults.standard.stringArray(forKey: "pinnedShortcuts") ?? []
     private(set) var isRunning: String?
 
     private init() {}
 
     func refresh() {
+        guard !isLoading else { return }
+        isLoading = true
         Task.detached(priority: .utility) {
             let output = Self.run(["list"])
-            let list = output.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
-            await MainActor.run { [weak self] in self?.names = list }
+            let list = output.split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                isLoading = false
+                withAnimation(Motion.content) { names = list }
+            }
         }
     }
 
@@ -44,38 +54,13 @@ final class ShortcutsStore {
         }
     }
 
-    /// Menu used by the home tile, built on demand so it always reflects the
-    /// current Shortcuts library.
-    func presentMenu() {
-        if names.isEmpty { refresh() }
-        let menu = NSMenu()
-        for name in pinned {
-            let item = menu.addItem(withTitle: name, action: #selector(MenuTarget.run(_:)), keyEquivalent: "")
-            item.target = MenuTarget.shared
-            item.representedObject = name
-        }
-        if !pinned.isEmpty { menu.addItem(.separator()) }
-        let all = NSMenu()
-        for name in names.prefix(80) {
-            let item = all.addItem(withTitle: name, action: #selector(MenuTarget.run(_:)), keyEquivalent: "")
-            item.target = MenuTarget.shared
-            item.representedObject = name
-        }
-        let allItem = menu.addItem(withTitle: "All Shortcuts", action: nil, keyEquivalent: "")
-        allItem.submenu = all
-        // Menu tracking runs its own event loop; hold the island open for as
-        // long as the menu is up, or it collapses under the user's cursor.
-        IslandModel.shared.interactionLock += 1
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
-        IslandModel.shared.interactionLock = max(0, IslandModel.shared.interactionLock - 1)
-    }
+    /// Nothing to run yet is a normal state, not an error - the picker says so
+    /// and offers the one action that helps.
+    var hasShortcuts: Bool { !names.isEmpty }
 
-    @MainActor
-    final class MenuTarget: NSObject {
-        static let shared = MenuTarget()
-        @objc func run(_ sender: NSMenuItem) {
-            guard let name = sender.representedObject as? String else { return }
-            ShortcutsStore.shared.run(name)
+    func openShortcutsApp() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.shortcuts") {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
     }
 

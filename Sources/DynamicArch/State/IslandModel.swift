@@ -14,13 +14,14 @@ enum IslandStage: Equatable {
 }
 
 enum IslandTab: String, CaseIterable, Identifiable, Codable {
-    case home, shelf, apps, clipboard, calendar, mirror
+    case home, timer, shelf, apps, clipboard, calendar, mirror
 
     var id: String { rawValue }
 
     var symbol: String {
         switch self {
         case .home: "rectangle.on.rectangle.angled"
+        case .timer: "timer"
         case .shelf: "tray.full"
         case .apps: "square.stack.3d.up"
         case .clipboard: "doc.on.clipboard"
@@ -34,13 +35,14 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
     var hasScrollableContent: Bool {
         switch self {
         case .apps, .clipboard, .calendar: true
-        case .home, .shelf, .mirror: false
+        case .home, .timer, .shelf, .mirror: false
         }
     }
 
     var title: String {
         switch self {
         case .home: "Home"
+        case .timer: "Timer"
         case .shelf: "Shelf"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
@@ -120,6 +122,7 @@ final class IslandModel {
     /// Sections the user has actually enabled, in display order.
     var availableTabs: [IslandTab] {
         var list: [IslandTab] = [.home]
+        if Preferences.shared.timerEnabled { list.append(.timer) }
         if Preferences.shared.shelfEnabled { list.append(.shelf) }
         if Preferences.shared.appsEnabled { list.append(.apps) }
         if Preferences.shared.clipboardEnabled { list.append(.clipboard) }
@@ -162,10 +165,12 @@ final class IslandModel {
     enum Layout {
         static let stageWidth: CGFloat = 980
         static let stageHeight: CGFloat = 420
-        static let openWidth: CGFloat = 620
-        static let openHeight: CGFloat = 188
-        static let openTallHeight: CGFloat = 236
-        static let openExtraTallHeight: CGFloat = 292
+        static let openWidth: CGFloat = Metrics.panelWidth
+        /// Every section shares one height, so paging between them slides
+        /// rather than resizing the island; only the scrolling lists step up.
+        static let openHeight: CGFloat = Metrics.panelHeight
+        static let openTallHeight: CGFloat = Metrics.panelHeight
+        static let openExtraTallHeight: CGFloat = Metrics.listPanelHeight
         /// Extra slop around the island where the pointer still counts as "on" it.
         static let hoverSlop: CGFloat = 6
         /// Slop before an open island auto-closes.
@@ -177,17 +182,61 @@ final class IslandModel {
     enum CompactPresentation: Equatable {
         case none
         case activity(IslandActivity)
+        /// A live timer, which unlike an activity never expires: it has to stay
+        /// on the island for as long as it is running.
+        case timer(TimerState)
         case media(MediaStore.Track)
     }
 
     var compactPresentation: CompactPresentation {
         if let activity { return .activity(activity) }
+        let timer = TimerStore.shared.state
+        if Preferences.shared.timerEnabled, timer.isVisible { return .timer(timer) }
         if Preferences.shared.mediaEnabled,
            Preferences.shared.mediaCompactWhilePlaying,
            let track = media.track, track.isPlaying {
             return .media(track)
         }
         return .none
+    }
+
+    /// Shortcuts picker, shown as an overlay inside the open island.
+    private(set) var shortcutsPickerVisible = false
+
+    func showShortcutsPicker() {
+        cancelPendingClose()
+        interactionLock += 1
+        withAnimation(Motion.content) { shortcutsPickerVisible = true }
+    }
+
+    func dismissShortcutsPicker() {
+        guard shortcutsPickerVisible else { return }
+        interactionLock = max(0, interactionLock - 1)
+        withAnimation(Motion.content) { shortcutsPickerVisible = false }
+    }
+
+    /// Third step of the collapse chain: the island shrinks to the cutout and
+    /// shows nothing but a progress bar under it.
+    private(set) var timerMinimal = false
+
+    var showsMinimalTimer: Bool {
+        timerMinimal && TimerStore.shared.state.isVisible && stage == .closed
+    }
+
+    func setTimerMinimal(_ minimal: Bool) {
+        guard timerMinimal != minimal else { return }
+        withAnimation(Motion.expand) { timerMinimal = minimal }
+        if minimal { Haptics.tick() }
+        refreshInteractivity()
+    }
+
+    func toggleTimerMinimal() { setTimerMinimal(!timerMinimal) }
+
+    /// Reacts to timer transitions without ever touching the timer itself: the
+    /// island's visual state and the timer's logical state stay separate.
+    func timerStateChanged(_ state: TimerState) {
+        if !state.isVisible, timerMinimal { setTimerMinimal(false) }
+        if state.phase == .completed, timerMinimal { setTimerMinimal(false) }
     }
 
     /// Sizes are rounded to even numbers: the island is centred by halving its
@@ -209,15 +258,34 @@ final class IslandModel {
 
         switch stage {
         case .closed:
+            if showsMinimalTimer {
+                // Exactly the cutout, plus 7 pt of body below it: just enough
+                // for the bar to be visible under the camera housing.
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width,
+                                                              height: resting.height + 7)),
+                                    topRadius: metrics.hasHardwareNotch ? 6 : 10,
+                                    bottomRadius: 5)
+            }
             switch compactPresentation {
             case .activity(let activity):
                 let extra = activity.compactSideWidth
                 return IslandLayout(size: Self.aligned(CGSize(width: resting.width + extra * 2,
-                                                 height: resting.height + activity.compactHeightBump)),
+                                                 height: resting.height + Metrics.medium)),
                                     topRadius: metrics.hasHardwareNotch ? 10 : 12,
                                     bottomRadius: (resting.height / 2 + 4).rounded())
+            case .timer(let timer):
+                // Collapsed timer: cutout plus a ring on one side and the
+                // readout on the other.
+                // The readout must never wrap: give each slot a whole
+                // Fibonacci step, and more again once hours are on screen.
+                let extra: CGFloat = timer.remaining() >= 3600 ? Metrics.xxlarge * 3 : Metrics.xxlarge * 2
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + extra,
+                                                              height: resting.height + Metrics.medium)),
+                                    topRadius: metrics.hasHardwareNotch ? 8 : 12,
+                                    bottomRadius: (resting.height / 2 + 3).rounded())
             case .media:
-                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + 74, height: resting.height + 4)),
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + Metrics.xxlarge + Metrics.large,
+                                                              height: resting.height + Metrics.medium)),
                                     topRadius: metrics.hasHardwareNotch ? 8 : 12,
                                     bottomRadius: (resting.height / 2 + 2).rounded())
             case .none:
@@ -226,8 +294,17 @@ final class IslandModel {
                                     bottomRadius: metrics.hasHardwareNotch ? 12 : (resting.height / 2).rounded())
             }
         case .peek:
-            let width = resting.width + 86
-            let height = resting.height + 14
+            // Peek has to fit whatever it is previewing, or the content clips
+            // against the inverted corners.
+            let extra: CGFloat = switch compactPresentation {
+            // Ring, readout, label, two controls and the chevron all have to
+            // fit without the label truncating.
+            case .timer: Metrics.xxlarge * 5
+            case .activity, .media: Metrics.xxlarge * 2
+            case .none: Metrics.xlarge * 2
+            }
+            let width = resting.width + extra
+            let height = resting.height + Metrics.medium
             return IslandLayout(size: Self.aligned(CGSize(width: width, height: height)),
                                 topRadius: 12,
                                 bottomRadius: height / 2)
@@ -354,6 +431,7 @@ final class IslandModel {
     }
 
     func close() {
+        dismissShortcutsPicker()
         cancelPendingClose()
         guard interactionLock == 0 else { return }
         setStage(hovering ? .peek : .closed)

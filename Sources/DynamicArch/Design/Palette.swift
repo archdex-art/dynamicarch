@@ -12,7 +12,7 @@ enum Palette {
     /// the bezel when idle.
     static var body: Color {
         switch theme {
-        case .dark: .black
+        case .dark, .nothing: .black
         case .light: Color(white: 0.97)
         case .glass: Color.white.opacity(0.08)
         }
@@ -23,6 +23,7 @@ enum Palette {
         case .dark: .white.opacity(0.08)
         case .light: .black.opacity(0.10)
         case .glass: .white.opacity(0.28)
+        case .nothing: .white.opacity(0.16)
         }
     }
 
@@ -43,6 +44,7 @@ enum Palette {
         case .dark: .white.opacity(0.10)
         case .light: .black.opacity(0.06)
         case .glass: .white.opacity(0.16)
+        case .nothing: .white.opacity(0.07)
         }
     }
 
@@ -51,6 +53,7 @@ enum Palette {
         case .dark: .white.opacity(0.18)
         case .light: .black.opacity(0.12)
         case .glass: .white.opacity(0.26)
+        case .nothing: .white.opacity(0.14)
         }
     }
 
@@ -61,19 +64,32 @@ enum Palette {
         case .dark: Color(white: 0.10)
         case .light: Color(white: 0.98)
         case .glass: Color(white: 0.12).opacity(0.96)
+        case .nothing: Color(white: 0.06)
         }
     }
 
-    static let accent = Color(nsColor: .controlAccentColor)
+    /// Nothing's single red accent replaces the system tint on that theme.
+    static var accent: Color {
+        theme == .nothing ? nothingRed : Color(nsColor: .controlAccentColor)
+    }
+
+    static let nothingRed = Color(red: 0.84, green: 0.10, blue: 0.13)
     static let positive = Color(red: 0.20, green: 0.82, blue: 0.44)
     static let warning = Color(red: 1.00, green: 0.72, blue: 0.18)
     static let danger = Color(red: 1.00, green: 0.30, blue: 0.28)
 }
 
 enum Typography {
-    static let compact = Font.system(size: 11, weight: .semibold, design: .rounded)
-    static let caption = Font.system(size: 10, weight: .medium, design: .rounded)
-    static let title = Font.system(size: 13, weight: .semibold, design: .rounded)
-    static let headline = Font.system(size: 15, weight: .bold, design: .rounded)
+    /// Nothing OS sets everything in a dot-matrix face; monospaced is the
+    /// closest thing we can rely on being installed, and it carries the same
+    /// mechanical rhythm.
+    private static var design: Font.Design {
+        Palette.theme == .nothing ? .monospaced : .rounded
+    }
+
+    static var compact: Font { .system(size: 11, weight: .semibold, design: design) }
+    static var caption: Font { .system(size: 10, weight: .medium, design: design) }
+    static var title: Font { .system(size: 13, weight: .semibold, design: design) }
+    static var headline: Font { .system(size: 15, weight: .bold, design: design) }
     static let mono = Font.system(size: 11, weight: .medium, design: .monospaced)
 }

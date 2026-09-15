@@ -135,7 +135,10 @@ final class MediaStore {
             next.artwork = nil
             next.accent = Palette.accent
         }
-        if let base64 = payload["artwork"] as? String,
+        // Artwork is published by another app, so its size is not ours to
+        // trust: reject anything implausible rather than decoding it on the
+        // main actor for every update.
+        if let base64 = payload["artwork"] as? String, base64.utf8.count <= 4 * 1024 * 1024,
            let data = Data(base64Encoded: base64),
            let image = NSImage(data: data) {
             next.artwork = image

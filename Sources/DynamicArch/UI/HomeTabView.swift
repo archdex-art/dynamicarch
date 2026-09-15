@@ -7,7 +7,7 @@ struct HomeTabView: View {
     let morph: Namespace.ID
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Metrics.large) {
             if let track = model.media.track {
                 NowPlayingPanel(track: track, model: model, morph: morph)
             } else {
@@ -16,9 +16,11 @@ struct HomeTabView: View {
 
             if Preferences.shared.shelfEnabled {
                 ShelfMiniColumn(model: model)
-                    .frame(width: 116)
+                    .frame(width: Metrics.sideColumn)
             }
         }
+        .frame(maxHeight: Metrics.tile)
+        .frame(maxHeight: .infinity, alignment: .center)
     }
 }
 
@@ -30,14 +32,14 @@ struct NowPlayingPanel: View {
     private var media: MediaStore { model.media }
 
     var body: some View {
-        HStack(spacing: 14) {
-            ArtworkView(image: track.artwork, accent: track.accent, cornerRadius: 12)
-                .frame(width: 96, height: 96)
+        HStack(spacing: Metrics.large) {
+            ArtworkView(image: track.artwork, accent: track.accent, cornerRadius: Metrics.medium)
+                .frame(width: Metrics.artwork, height: Metrics.artwork)
                 .matchedGeometryEffect(id: "artwork", in: morph)
                 .onTapGesture { media.activatePlayer() }
                 .help(track.appName ?? "Now Playing")
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Metrics.medium) {
                 VStack(alignment: .leading, spacing: 1) {
                     MarqueeText(text: track.title, font: Typography.title)
                     MarqueeText(text: track.artist ?? track.appName ?? "Now Playing",
@@ -159,7 +161,9 @@ struct QuickLaunchGrid: View {
     let model: IslandModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        // Tiles keep a square-ish proportion instead of stretching to the
+        // panel's full height, which is what made them read as columns.
+        HStack(spacing: Metrics.medium) {
             IslandTile(title: "Shelf", action: { withAnimation(Motion.content) { model.tab = .shelf } }) {
                 ZStack {
                     Image(systemName: "tray.full.fill")
@@ -185,15 +189,17 @@ struct QuickLaunchGrid: View {
                 WeatherGlance()
             }
 
-            IslandTile(title: nil) {
-                TimerControl()
+            IslandTile(title: nil, action: { withAnimation(Motion.content) { model.tab = .timer } }) {
+                TimerTile(model: model)
             }
 
-            IslandTile(title: "Shortcuts", action: { ShortcutsStore.shared.presentMenu() }) {
+            IslandTile(title: "Shortcuts", action: { model.showShortcutsPicker() }) {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Palette.warning)
             }
         }
+        .frame(height: Metrics.tile)
+        .frame(maxHeight: .infinity, alignment: .center)
     }
 }

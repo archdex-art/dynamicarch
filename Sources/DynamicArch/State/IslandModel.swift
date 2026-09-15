@@ -14,24 +14,37 @@ enum IslandStage: Equatable {
 }
 
 enum IslandTab: String, CaseIterable, Identifiable, Codable {
-    case home, shelf, clipboard, calendar, mirror
+    case home, timer, shelf, apps, clipboard, calendar, mirror
 
     var id: String { rawValue }
 
     var symbol: String {
         switch self {
         case .home: "rectangle.on.rectangle.angled"
+        case .timer: "timer"
         case .shelf: "tray.full"
+        case .apps: "square.stack.3d.up"
         case .clipboard: "doc.on.clipboard"
         case .calendar: "calendar"
         case .mirror: "web.camera"
         }
     }
 
+    /// Sections that own a scroll view. A two-finger scroll there must move
+    /// their content, never collapse the island.
+    var hasScrollableContent: Bool {
+        switch self {
+        case .apps, .clipboard, .calendar: true
+        case .home, .timer, .shelf, .mirror: false
+        }
+    }
+
     var title: String {
         switch self {
         case .home: "Home"
+        case .timer: "Timer"
         case .shelf: "Shelf"
+        case .apps: "Apps"
         case .clipboard: "Clipboard"
         case .calendar: "Calendar"
         case .mirror: "Mirror"
@@ -76,7 +89,41 @@ final class IslandModel {
     /// The drag is currently over our drop area.
     private(set) var dropTargeted = false
     /// Blocks auto-close (menus, text entry, an in-flight file operation).
-    var interactionLock = 0
+    /// Reasons the island must stay open, each with the moment it was taken.
+    ///
+    /// This used to be a bare counter, and a single missed release - Quick
+    /// Look's panel never reporting that it closed, say - pinned the island
+    /// open for the rest of the session with no way back. Locks are now named,
+    /// so a second acquire cannot double-count, and they expire, so a lost
+    /// release heals itself.
+    private var interactionLocks: [String: Date] = [:]
+
+    /// Longer than any legitimate modal interaction, short enough that a leak
+    /// is a blip rather than a broken app.
+    private static let lockTimeout: TimeInterval = 20
+
+    var isInteractionLocked: Bool {
+        pruneInteractionLocks()
+        return !interactionLocks.isEmpty
+    }
+
+    func acquireInteractionLock(_ reason: String) {
+        cancelPendingClose()
+        interactionLocks[reason] = .now
+    }
+
+    func releaseInteractionLock(_ reason: String) {
+        guard interactionLocks.removeValue(forKey: reason) != nil else { return }
+        if stage == .open, !hovering, Preferences.shared.closeOnPointerExit {
+            scheduleClose(after: 0.4)
+        }
+    }
+
+    private func pruneInteractionLocks() {
+        guard !interactionLocks.isEmpty else { return }
+        let cutoff = Date.now.addingTimeInterval(-Self.lockTimeout)
+        interactionLocks = interactionLocks.filter { $0.value > cutoff }
+    }
 
     /// Bumped whenever the island content should re-measure; lets views animate
     /// layout changes coherently with the shell.
@@ -109,7 +156,9 @@ final class IslandModel {
     /// Sections the user has actually enabled, in display order.
     var availableTabs: [IslandTab] {
         var list: [IslandTab] = [.home]
+        if Preferences.shared.timerEnabled { list.append(.timer) }
         if Preferences.shared.shelfEnabled { list.append(.shelf) }
+        if Preferences.shared.appsEnabled { list.append(.apps) }
         if Preferences.shared.clipboardEnabled { list.append(.clipboard) }
         if Preferences.shared.calendarEnabled { list.append(.calendar) }
         if Preferences.shared.mirrorEnabled { list.append(.mirror) }
@@ -150,9 +199,12 @@ final class IslandModel {
     enum Layout {
         static let stageWidth: CGFloat = 980
         static let stageHeight: CGFloat = 420
-        static let openWidth: CGFloat = 620
-        static let openHeight: CGFloat = 188
-        static let openTallHeight: CGFloat = 236
+        static let openWidth: CGFloat = Metrics.panelWidth
+        /// Every section shares one height, so paging between them slides
+        /// rather than resizing the island; only the scrolling lists step up.
+        static let openHeight: CGFloat = Metrics.panelHeight
+        static let openTallHeight: CGFloat = Metrics.panelHeight
+        static let openExtraTallHeight: CGFloat = Metrics.listPanelHeight
         /// Extra slop around the island where the pointer still counts as "on" it.
         static let hoverSlop: CGFloat = 6
         /// Slop before an open island auto-closes.
@@ -164,17 +216,71 @@ final class IslandModel {
     enum CompactPresentation: Equatable {
         case none
         case activity(IslandActivity)
+        /// A live timer, which unlike an activity never expires: it has to stay
+        /// on the island for as long as it is running.
+        case timer(TimerState)
         case media(MediaStore.Track)
     }
 
     var compactPresentation: CompactPresentation {
         if let activity { return .activity(activity) }
+        let timer = TimerStore.shared.state
+        if Preferences.shared.timerEnabled, timer.isVisible { return .timer(timer) }
         if Preferences.shared.mediaEnabled,
            Preferences.shared.mediaCompactWhilePlaying,
            let track = media.track, track.isPlaying {
             return .media(track)
         }
         return .none
+    }
+
+    /// Shortcuts picker, shown as an overlay inside the open island.
+    private(set) var shortcutsPickerVisible = false
+
+    func showShortcutsPicker() {
+        acquireInteractionLock("shortcuts")
+        withAnimation(Motion.content) { shortcutsPickerVisible = true }
+    }
+
+    func dismissShortcutsPicker() {
+        guard shortcutsPickerVisible else { return }
+        releaseInteractionLock("shortcuts")
+        withAnimation(Motion.content) { shortcutsPickerVisible = false }
+    }
+
+    /// Third step of the collapse chain: the island shrinks to the cutout and
+    /// shows nothing but a progress bar under it.
+    private(set) var timerMinimal = false
+
+    var showsMinimalTimer: Bool {
+        timerMinimal && TimerStore.shared.state.isVisible && stage == .closed
+    }
+
+    func setTimerMinimal(_ minimal: Bool) {
+        guard timerMinimal != minimal else { return }
+        withAnimation(Motion.expand) { timerMinimal = minimal }
+        if minimal { Haptics.tick() }
+        refreshInteractivity()
+    }
+
+    func toggleTimerMinimal() { setTimerMinimal(!timerMinimal) }
+
+    /// Reacts to timer transitions without ever touching the timer itself: the
+    /// island's visual state and the timer's logical state stay separate.
+    func timerStateChanged(_ state: TimerState) {
+        if !state.isVisible, timerMinimal { setTimerMinimal(false) }
+        if state.phase == .completed, timerMinimal { setTimerMinimal(false) }
+    }
+
+    /// Sizes are rounded to even numbers: the island is centred by halving its
+    /// width, and an odd width puts its edges on half-points where the two
+    /// inverted corners no longer rasterise identically.
+    private static func aligned(_ size: CGSize) -> CGSize {
+        func even(_ value: CGFloat) -> CGFloat {
+            let rounded = value.rounded()
+            return rounded.truncatingRemainder(dividingBy: 2) == 0 ? rounded : rounded + 1
+        }
+        return CGSize(width: even(size.width), height: size.height.rounded())
     }
 
     var layout: IslandLayout {
@@ -185,33 +291,65 @@ final class IslandModel {
 
         switch stage {
         case .closed:
+            if showsMinimalTimer {
+                // Exactly the cutout, plus 7 pt of body below it: just enough
+                // for the bar to be visible under the camera housing.
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width,
+                                                              height: resting.height + 7)),
+                                    topRadius: metrics.hasHardwareNotch ? 6 : 10,
+                                    bottomRadius: 5)
+            }
             switch compactPresentation {
             case .activity(let activity):
                 let extra = activity.compactSideWidth
-                return IslandLayout(size: CGSize(width: resting.width + extra * 2,
-                                                 height: resting.height + activity.compactHeightBump),
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + extra * 2,
+                                                 height: resting.height + Metrics.medium)),
                                     topRadius: metrics.hasHardwareNotch ? 10 : 12,
-                                    bottomRadius: resting.height / 2 + 4)
-            case .media:
-                return IslandLayout(size: CGSize(width: resting.width + 74, height: resting.height + 4),
+                                    bottomRadius: (resting.height / 2 + 4).rounded())
+            case .timer(let timer):
+                // Collapsed timer: cutout plus a ring on one side and the
+                // readout on the other.
+                // The readout must never wrap: give each slot a whole
+                // Fibonacci step, and more again once hours are on screen.
+                let extra: CGFloat = timer.remaining() >= 3600 ? Metrics.xxlarge * 3 : Metrics.xxlarge * 2
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + extra,
+                                                              height: resting.height + Metrics.medium)),
                                     topRadius: metrics.hasHardwareNotch ? 8 : 12,
-                                    bottomRadius: resting.height / 2 + 2)
+                                    bottomRadius: (resting.height / 2 + 3).rounded())
+            case .media:
+                return IslandLayout(size: Self.aligned(CGSize(width: resting.width + Metrics.xxlarge + Metrics.large,
+                                                              height: resting.height + Metrics.medium)),
+                                    topRadius: metrics.hasHardwareNotch ? 8 : 12,
+                                    bottomRadius: (resting.height / 2 + 2).rounded())
             case .none:
-                return IslandLayout(size: resting,
+                return IslandLayout(size: Self.aligned(resting),
                                     topRadius: metrics.hasHardwareNotch ? 6 : 10,
-                                    bottomRadius: metrics.hasHardwareNotch ? 12 : resting.height / 2)
+                                    bottomRadius: metrics.hasHardwareNotch ? 12 : (resting.height / 2).rounded())
             }
         case .peek:
-            let width = resting.width + 86
-            let height = resting.height + 14
-            return IslandLayout(size: CGSize(width: width, height: height),
+            // Peek has to fit whatever it is previewing, or the content clips
+            // against the inverted corners.
+            let extra: CGFloat = switch compactPresentation {
+            // Ring, readout, label, two controls and the chevron all have to
+            // fit without the label truncating.
+            case .timer: Metrics.xxlarge * 5
+            case .activity, .media: Metrics.xxlarge * 2
+            case .none: Metrics.xlarge * 2
+            }
+            let width = resting.width + extra
+            let height = resting.height + Metrics.medium
+            return IslandLayout(size: Self.aligned(CGSize(width: width, height: height)),
                                 topRadius: 12,
                                 bottomRadius: height / 2)
 
         case .open:
-            let height = tab == .home ? Layout.openHeight : Layout.openTallHeight
+            let height = switch tab {
+            case .home: Layout.openHeight
+            case .apps: Layout.openExtraTallHeight
+            default: Layout.openTallHeight
+            }
             let width = Layout.openWidth
-            return IslandLayout(size: CGSize(width: width, height: height),
+            return IslandLayout(size: Self.aligned(CGSize(width: width, height: height)),
                                 topRadius: 14,
                                 bottomRadius: 30)
         }
@@ -220,8 +358,8 @@ final class IslandModel {
     /// Island rect inside the stage view (AppKit coordinates, origin bottom-left).
     func islandRect(inStage bounds: CGRect) -> CGRect {
         let size = layout.size
-        return CGRect(x: (bounds.width - size.width) / 2,
-                      y: bounds.height - size.height,
+        return CGRect(x: ((bounds.width - size.width) / 2).rounded(),
+                      y: (bounds.height - size.height).rounded(),
                       width: size.width,
                       height: size.height)
     }
@@ -245,8 +383,8 @@ final class IslandModel {
     func islandScreenRect() -> CGRect {
         guard let metrics else { return .zero }
         let size = layout.size
-        return CGRect(x: metrics.notchCenterX - size.width / 2,
-                      y: metrics.frame.maxY - size.height,
+        return CGRect(x: (metrics.notchCenterX - size.width / 2).rounded(),
+                      y: (metrics.frame.maxY - size.height).rounded(),
                       width: size.width,
                       height: size.height)
     }
@@ -271,6 +409,16 @@ final class IslandModel {
     func refreshInteractivity(pointer: CGPoint? = nil) {
         let location = pointer ?? NSEvent.mouseLocation
         interactivityHandler?(interactiveScreenRect().contains(location) || dragInFlight)
+
+        // Recovery: if the island is open with the pointer nowhere near it and
+        // nothing holding it, close it. Any missed event - a Space switch, a
+        // modal that never reported closing - resolves itself within a second
+        // instead of stranding the panel on screen.
+        guard stage == .open, Preferences.shared.closeOnPointerExit, !dragInFlight else { return }
+        let slack = islandScreenRect().insetBy(dx: -Layout.closeSlop, dy: -Layout.closeSlop)
+        guard !slack.contains(location), !isInteractionLocked else { return }
+        hovering = false
+        scheduleClose(after: 0.3)
     }
 
     /// Belt and braces: even if an event is missed - a Space switch, a
@@ -325,9 +473,10 @@ final class IslandModel {
         Haptics.tap()
     }
 
-    func close() {
+    func close(force: Bool = false) {
+        dismissShortcutsPicker()
         cancelPendingClose()
-        guard interactionLock == 0 else { return }
+        guard force || !isInteractionLocked else { return }
         setStage(hovering ? .peek : .closed)
         // Never resume straight back into the camera: reopening the island
         // should not silently switch the webcam on.
@@ -346,7 +495,7 @@ final class IslandModel {
     func scheduleClose(after delay: TimeInterval = 0.28) {
         cancelPendingClose()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, interactionLock == 0, !dragInFlight else { return }
+            guard let self, !isInteractionLocked, !dragInFlight else { return }
             setStage(hovering ? .peek : .closed)
         }
         closeWorkItem = work
@@ -388,7 +537,9 @@ final class IslandModel {
     func pointerClickedOutside(_ location: CGPoint) {
         guard stage == .open else { return }
         guard !islandScreenRect().contains(location) else { return }
-        close()
+        // An explicit click away is an unambiguous "close", so it overrides
+        // any lock rather than being silently swallowed by one.
+        close(force: true)
     }
 
     // MARK: - Drag & drop
@@ -415,7 +566,7 @@ final class IslandModel {
             }
         } else {
             dropTargeted = false
-            if stage == .open, !hovering, interactionLock == 0 {
+            if stage == .open, !hovering, !isInteractionLocked {
                 scheduleClose(after: 0.45)
             }
         }

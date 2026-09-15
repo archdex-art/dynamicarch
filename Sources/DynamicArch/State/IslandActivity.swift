@@ -6,7 +6,7 @@ import SwiftUI
 struct IslandActivity: Identifiable, Equatable {
     enum Kind: String, Equatable {
         case volume, brightness, keyboardBacklight, battery, power, bluetooth
-        case media, timer, shelf, notification, custom
+        case media, timer, shelf, clipboard, notification, custom
 
         /// Higher wins when two activities compete for the island.
         var priority: Int {
@@ -16,6 +16,7 @@ struct IslandActivity: Identifiable, Equatable {
             case .bluetooth: 65
             case .volume, .brightness, .keyboardBacklight: 60
             case .timer: 50
+            case .clipboard: 55
             case .media: 40
             case .shelf: 45
             case .custom: 30
@@ -79,9 +80,11 @@ struct IslandActivity: Identifiable, Equatable {
         case .level:
             return 84
         case .badge(_, _, let title, let subtitle, _):
+            // "Markdown text file · 7.8 KB" is a normal subtitle now that the
+            // clipboard reports type and size, so the cap has to fit it.
             let base: CGFloat = 46
             let text = max(CGFloat(title.count), CGFloat(subtitle?.count ?? 0))
-            return min(150, base + text * 3.4)
+            return min(190, base + text * 3.6)
         case .media:
             return 92
         case .progress:

@@ -10,7 +10,7 @@ struct IslandRootView: View {
         IslandContainer(model: model, morph: morph)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .ignoresSafeArea(.all)
-            .environment(\.colorScheme, .dark)
+            .environment(\.colorScheme, Palette.theme.isLight ? .light : .dark)
     }
 }
 
@@ -25,20 +25,19 @@ struct IslandContainer: View {
         let isOpen = model.stage == .open
 
         ZStack(alignment: .top) {
-            NotchShape(topRadius: layout.topRadius, bottomRadius: layout.bottomRadius)
-                .fill(Palette.body)
-                .overlay {
-                    NotchShape(topRadius: layout.topRadius, bottomRadius: layout.bottomRadius)
-                        .stroke(Palette.hairline, lineWidth: 0.7)
-                        .opacity(isOpen ? 1 : 0)
-                }
-                // Accent bloom: only while open or targeted, and only a shadow,
-                // so we never pay for a blur pass during the morph.
-                .shadow(color: accent.opacity(isOpen ? 0.28 : 0), radius: 26, y: 8)
-                .shadow(color: .black.opacity(isOpen ? 0.55 : 0), radius: 18, y: 10)
+            IslandSurface(topRadius: layout.topRadius,
+                          bottomRadius: layout.bottomRadius,
+                          accent: accent,
+                          isOpen: isOpen,
+                          isIdle: model.stage == .closed && model.compactPresentation == .none)
 
             content
-                .frame(width: layout.size.width, height: layout.size.height, alignment: .top)
+                // Compact states centre their content in the body, so the gap
+                // above and below it is equal. Only the open panel anchors to
+                // the top, because its header has to sit level with the notch.
+                .frame(width: layout.size.width,
+                       height: layout.size.height,
+                       alignment: isOpen ? .top : .center)
                 .clipShape(NotchShape(topRadius: layout.topRadius, bottomRadius: layout.bottomRadius))
         }
         .frame(width: layout.size.width, height: layout.size.height)

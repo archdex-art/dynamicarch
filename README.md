@@ -35,12 +35,36 @@ the original moves; drag them back out one at a time or as a stack, AirDrop
 them, Quick Look them, or convert them (image formats, PDF, audio extraction,
 video transcode) without leaving the island.
 
+**Running apps** - Every app with its live CPU and memory, sorted by weight,
+with hung apps flagged as *Not responding*. Quitting is graceful by default, so
+macOS still offers to save your work; **Force quit** is a separate action that
+always confirms and warns harder when the target is healthy, because killing a
+working app is how data gets lost. System-critical processes can never be
+force-quit, any app can be shielded from bulk actions, **Quit All** is staggered
+so fifty apps do not throw fifty save dialogs at once, and idle apps can be
+quit automatically after a period you choose - always by the graceful path.
+
 **Clipboard history**, **calendar**, **weather**, **camera mirror**,
 **Shortcuts runner**, and **timers** each get a section.
 
 **Notifications and calls** - With Accessibility access granted, banners are
 mirrored into the island, and incoming calls take it over with working
 Accept/Decline buttons driven through the banner's own controls.
+
+## Themes
+
+Three looks, switchable live in Settings → Appearance:
+
+- **Dark** - black chrome that is indistinguishable from the bezel, so the
+  island vanishes when idle.
+- **Light** - bright chrome with dark text for light desktops.
+- **Glass** - the Dock's own material: a behind-window blur of the desktop and
+  windows underneath, a scrim for density, and a single hair of light around
+  the edge. Nothing is added on top, which is why it reads as a pane rather
+  than a glowing panel - the island simply takes on whatever is behind it.
+
+At rest the island is flat black on every theme, so it still disappears into
+the bezel instead of outlining an empty notch.
 
 ## Build
 

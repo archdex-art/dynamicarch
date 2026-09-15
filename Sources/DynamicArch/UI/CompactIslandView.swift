@@ -7,8 +7,21 @@ struct CompactIslandView: View {
     let morph: Namespace.ID
 
     var body: some View {
-        let resting = model.metrics?.restingSize.width ?? 190
+        let resting: CGFloat = model.metrics?.restingSize.width ?? 190
+        let presentation = model.compactPresentation
 
+        Group {
+            // Fully collapsed: the island is the cutout and a bar, nothing else.
+            if model.showsMinimalTimer, case .timer(let state) = presentation {
+                TimerMinimalView(state: state)
+            } else {
+                compactBody(resting: resting)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func compactBody(resting: CGFloat) -> some View {
         switch model.compactPresentation {
         case .none:
             Color.clear
@@ -19,8 +32,21 @@ struct CompactIslandView: View {
                 Spacer(minLength: resting)
                 CompactSlot(alignment: .trailing) { trailing(for: activity) }
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 2)
+            .padding(.horizontal, Metrics.compactInset)
+
+        case .timer(let state):
+            HStack(spacing: 0) {
+                CompactSlot(alignment: .leading) {
+                    TimerRing(state: state, lineWidth: 2.5,
+                              tint: state.phase == .paused ? Palette.secondaryText : Palette.warning)
+                        .frame(width: 15, height: 15)
+                }
+                Spacer(minLength: resting)
+                CompactSlot(alignment: .trailing) {
+                    TimerCompactView(state: state, showsRing: false)
+                }
+            }
+            .padding(.horizontal, Metrics.compactInset)
 
         case .media(let track):
             HStack(spacing: 0) {
@@ -41,8 +67,7 @@ struct CompactIslandView: View {
                     }
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 2)
+            .padding(.horizontal, Metrics.compactInset)
         }
     }
 

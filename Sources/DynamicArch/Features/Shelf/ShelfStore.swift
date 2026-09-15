@@ -32,6 +32,9 @@ final class ShelfStore {
         try? FileManager.default.createDirectory(at: base,
                                                  withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
+        // Attributes apply at creation only, so a store created by an earlier
+        // build keeps its old permissions until they are set explicitly.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: base.path)
         return base.standardizedFileURL
     }()
 

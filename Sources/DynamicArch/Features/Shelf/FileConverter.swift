@@ -185,6 +185,8 @@ enum FileConverter {
         try? FileManager.default.createDirectory(at: directory,
                                                  withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700],
+                                              ofItemAtPath: directory.path)
         let base = source.deletingPathExtension().lastPathComponent
         var candidate = directory.appendingPathComponent("\(base).\(ext)")
         var counter = 2

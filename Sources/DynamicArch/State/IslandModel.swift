@@ -89,7 +89,41 @@ final class IslandModel {
     /// The drag is currently over our drop area.
     private(set) var dropTargeted = false
     /// Blocks auto-close (menus, text entry, an in-flight file operation).
-    var interactionLock = 0
+    /// Reasons the island must stay open, each with the moment it was taken.
+    ///
+    /// This used to be a bare counter, and a single missed release - Quick
+    /// Look's panel never reporting that it closed, say - pinned the island
+    /// open for the rest of the session with no way back. Locks are now named,
+    /// so a second acquire cannot double-count, and they expire, so a lost
+    /// release heals itself.
+    private var interactionLocks: [String: Date] = [:]
+
+    /// Longer than any legitimate modal interaction, short enough that a leak
+    /// is a blip rather than a broken app.
+    private static let lockTimeout: TimeInterval = 20
+
+    var isInteractionLocked: Bool {
+        pruneInteractionLocks()
+        return !interactionLocks.isEmpty
+    }
+
+    func acquireInteractionLock(_ reason: String) {
+        cancelPendingClose()
+        interactionLocks[reason] = .now
+    }
+
+    func releaseInteractionLock(_ reason: String) {
+        guard interactionLocks.removeValue(forKey: reason) != nil else { return }
+        if stage == .open, !hovering, Preferences.shared.closeOnPointerExit {
+            scheduleClose(after: 0.4)
+        }
+    }
+
+    private func pruneInteractionLocks() {
+        guard !interactionLocks.isEmpty else { return }
+        let cutoff = Date.now.addingTimeInterval(-Self.lockTimeout)
+        interactionLocks = interactionLocks.filter { $0.value > cutoff }
+    }
 
     /// Bumped whenever the island content should re-measure; lets views animate
     /// layout changes coherently with the shell.
@@ -204,14 +238,13 @@ final class IslandModel {
     private(set) var shortcutsPickerVisible = false
 
     func showShortcutsPicker() {
-        cancelPendingClose()
-        interactionLock += 1
+        acquireInteractionLock("shortcuts")
         withAnimation(Motion.content) { shortcutsPickerVisible = true }
     }
 
     func dismissShortcutsPicker() {
         guard shortcutsPickerVisible else { return }
-        interactionLock = max(0, interactionLock - 1)
+        releaseInteractionLock("shortcuts")
         withAnimation(Motion.content) { shortcutsPickerVisible = false }
     }
 
@@ -376,6 +409,16 @@ final class IslandModel {
     func refreshInteractivity(pointer: CGPoint? = nil) {
         let location = pointer ?? NSEvent.mouseLocation
         interactivityHandler?(interactiveScreenRect().contains(location) || dragInFlight)
+
+        // Recovery: if the island is open with the pointer nowhere near it and
+        // nothing holding it, close it. Any missed event - a Space switch, a
+        // modal that never reported closing - resolves itself within a second
+        // instead of stranding the panel on screen.
+        guard stage == .open, Preferences.shared.closeOnPointerExit, !dragInFlight else { return }
+        let slack = islandScreenRect().insetBy(dx: -Layout.closeSlop, dy: -Layout.closeSlop)
+        guard !slack.contains(location), !isInteractionLocked else { return }
+        hovering = false
+        scheduleClose(after: 0.3)
     }
 
     /// Belt and braces: even if an event is missed - a Space switch, a
@@ -430,10 +473,10 @@ final class IslandModel {
         Haptics.tap()
     }
 
-    func close() {
+    func close(force: Bool = false) {
         dismissShortcutsPicker()
         cancelPendingClose()
-        guard interactionLock == 0 else { return }
+        guard force || !isInteractionLocked else { return }
         setStage(hovering ? .peek : .closed)
         // Never resume straight back into the camera: reopening the island
         // should not silently switch the webcam on.
@@ -452,7 +495,7 @@ final class IslandModel {
     func scheduleClose(after delay: TimeInterval = 0.28) {
         cancelPendingClose()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, interactionLock == 0, !dragInFlight else { return }
+            guard let self, !isInteractionLocked, !dragInFlight else { return }
             setStage(hovering ? .peek : .closed)
         }
         closeWorkItem = work
@@ -494,7 +537,9 @@ final class IslandModel {
     func pointerClickedOutside(_ location: CGPoint) {
         guard stage == .open else { return }
         guard !islandScreenRect().contains(location) else { return }
-        close()
+        // An explicit click away is an unambiguous "close", so it overrides
+        // any lock rather than being silently swallowed by one.
+        close(force: true)
     }
 
     // MARK: - Drag & drop
@@ -521,7 +566,7 @@ final class IslandModel {
             }
         } else {
             dropTargeted = false
-            if stage == .open, !hovering, interactionLock == 0 {
+            if stage == .open, !hovering, !isInteractionLocked {
                 scheduleClose(after: 0.45)
             }
         }

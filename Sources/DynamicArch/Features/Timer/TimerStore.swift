@@ -62,6 +62,8 @@ final class TimerStore {
 
     private var completion: DispatchWorkItem?
     private var celebration: DispatchWorkItem?
+    /// Retires a finished timer once it has finished announcing itself.
+    private var retirement: DispatchWorkItem?
     private var wakeObserver: NSObjectProtocol?
     private let storageKey = "timerState"
 
@@ -79,6 +81,9 @@ final class TimerStore {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reconcile() }
         }
+        // A completion restored from a previous session has already had its
+        // moment; it must not greet the user on launch.
+        if state.phase == .completed { clear() }
         reconcile()
     }
 
@@ -187,6 +192,10 @@ final class TimerStore {
     }
 
     /// Dismisses the timer entirely.
+    /// How long a finished timer stays on screen, blinking, before it retires.
+    /// Matched to the blink in `TimerViews`.
+    static let announcementDuration: TimeInterval = 4.6
+
     func clear() {
         apply(TimerState())
         justCompleted = false
@@ -196,6 +205,10 @@ final class TimerStore {
     // MARK: - Transitions
 
     private func apply(_ next: TimerState) {
+        // Any transition invalidates a pending retirement: the user has taken
+        // the timer somewhere else.
+        retirement?.cancel()
+        retirement = nil
         withAnimation(Motion.content) { state = next }
         scheduleCompletion()
         persist()
@@ -230,16 +243,20 @@ final class TimerStore {
         celebration = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: work)
 
+        // Retire after the announcement. Without this a finished timer stays
+        // on the island for ever, because `isVisible` is true in this phase.
+        let retire = DispatchWorkItem { [weak self] in
+            guard let self, state.phase == .completed else { return }
+            clear()
+        }
+        retirement = retire
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.announcementDuration, execute: retire)
+
+        // No separate "finished" badge: an activity outranks the timer in the
+        // compact slot, so it hid the very thing that is meant to blink - and
+        // said the same thing twice, truncated.
         NSSound(named: "Glass")?.play()
         Haptics.success()
-        ActivityCenter.shared.present(
-            IslandActivity(kind: .timer,
-                           content: .badge(symbol: "timer", image: nil,
-                                           title: "\(state.label) finished",
-                                           subtitle: "Reset or add time",
-                                           tint: Palette.warning),
-                           duration: 4)
-        )
     }
 
     /// Catches a timer whose deadline passed while the machine was asleep or

@@ -66,7 +66,7 @@ final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewP
         self.urls = urls
         // Quick Look needs an active app with a key window; an accessory app
         // has neither, so borrow both and hold the island open meanwhile.
-        IslandModel.shared.interactionLock += 1
+        IslandModel.shared.acquireInteractionLock("quicklook")
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         guard let panel = QLPreviewPanel.shared() else { return }
@@ -79,7 +79,7 @@ final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewP
 
     /// Called by the panel when it goes away; hands focus and the island back.
     func endPreviewSession() {
-        IslandModel.shared.interactionLock = max(0, IslandModel.shared.interactionLock - 1)
+        IslandModel.shared.releaseInteractionLock("quicklook")
         if !SettingsWindowController.shared.isVisible {
             NSApp.setActivationPolicy(.accessory)
         }

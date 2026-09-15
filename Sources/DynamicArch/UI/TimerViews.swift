@@ -38,6 +38,47 @@ private struct TimerReadout: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
+        .completionBlink(state.phase == .completed)
+    }
+}
+
+/// A finished timer announces itself and then gets out of the way: the
+/// readout pulses on a steady beat for a few seconds, which is long enough to
+/// be noticed and short enough not to become furniture. The island clears
+/// itself afterwards (see `TimerStore.complete`), so the blink and the
+/// lifetime are deliberately the same length.
+private struct CompletionBlink: ViewModifier {
+    let active: Bool
+
+    /// Four beats of half a second, autoreversed - just over four seconds.
+    static let beat: Double = 0.5
+    static let beats = 9
+    static var duration: Double { beat * Double(beats) }
+
+    @State private var dimmed = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(active && dimmed ? 0.28 : 1)
+            .onAppear { start() }
+            .onChange(of: active) { _, _ in start() }
+    }
+
+    private func start() {
+        guard active, !MotionPreference.reducesMotion else {
+            dimmed = false
+            return
+        }
+        dimmed = false
+        withAnimation(.easeInOut(duration: Self.beat).repeatCount(Self.beats, autoreverses: true)) {
+            dimmed = true
+        }
+    }
+}
+
+private extension View {
+    func completionBlink(_ active: Bool) -> some View {
+        modifier(CompletionBlink(active: active))
     }
 }
 
@@ -76,6 +117,7 @@ struct TimerRing: View {
             }
             .opacity(state.phase == .paused ? 0.75 : 1)
         }
+        .completionBlink(state.phase == .completed)
     }
 }
 

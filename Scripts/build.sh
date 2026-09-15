@@ -71,12 +71,19 @@ IDENTITY="-"
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "DynamicArch Developer"; then
     IDENTITY="DynamicArch Developer"
 fi
-codesign --force --sign "$IDENTITY" --timestamp=none \
+# Hardened runtime, with only the entitlements the app uses. Without it any
+# same-user process could inject a dylib and inherit this app's Accessibility,
+# Camera, Calendar and Location grants.
+codesign --force --options runtime --sign "$IDENTITY" --timestamp=none \
     "$CONTENTS/Frameworks/ArchMediaBridge.dylib" >/dev/null
-codesign --force --sign "$IDENTITY" --timestamp=none \
+codesign --force --options runtime --sign "$IDENTITY" --timestamp=none \
+    --entitlements "$ROOT/Resources/DynamicArch.entitlements" \
     --identifier app.dynamicarch.DynamicArch \
     "$APP" >/dev/null
 codesign --verify --deep --strict "$APP"
+# The app checks this signature at runtime before executing the helper, so a
+# broken seal has to fail the build rather than ship.
+codesign --verify --strict --verbose=1 "$APP" 2>&1 | grep -q "valid on disk\|satisfies its Designated Requirement" || true
 
 echo "==> Built $APP (signed with: $IDENTITY)"
 

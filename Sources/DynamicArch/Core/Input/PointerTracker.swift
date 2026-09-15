@@ -79,7 +79,10 @@ final class PointerTracker {
         let changeCount = pasteboard.changeCount
         guard changeCount != dragPasteboardChangeCount else { return }
         dragPasteboardChangeCount = changeCount
-        Diagnostics.drag.info("drag pasteboard changed count=\(changeCount) types=\(pasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
+        // Type identifiers describe what the user is dragging, so they stay
+        // private in the log rather than being readable by anything that can
+        // stream the unified log.
+        Diagnostics.drag.debug("drag pasteboard changed: \(pasteboard.types?.count ?? 0) types")
         guard let types = pasteboard.types, !types.isEmpty else { return }
         let droppable: Set<NSPasteboard.PasteboardType> = [.fileURL, .URL, .png, .tiff, .pdf, .rtf, .string, .html]
         guard types.contains(where: { droppable.contains($0) || $0.rawValue.hasPrefix("public.") }) else { return }

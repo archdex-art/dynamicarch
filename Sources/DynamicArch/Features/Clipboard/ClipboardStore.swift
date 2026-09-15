@@ -109,6 +109,8 @@ final class ClipboardStore {
     private var timer: Timer?
     private var lastChangeCount = NSPasteboard.general.changeCount
     private let limit = 60
+    /// Longest clip kept verbatim.
+    private static let textLimit = 64 * 1024
 
     private init() {}
 
@@ -148,7 +150,12 @@ final class ClipboardStore {
         }
         if let text = pasteboard.string(forType: .string),
            text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            insert(Entry(payload: .text(text), date: .now, sourceApp: source))
+            // Bounded: history lives in memory for the session, and there is no
+            // reason to hold a multi-megabyte paste - or keep that much of a
+            // secret around - to show a one-line preview.
+            insert(Entry(payload: .text(String(text.prefix(Self.textLimit))),
+                         date: .now,
+                         sourceApp: source))
             return
         }
         if let data = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png),

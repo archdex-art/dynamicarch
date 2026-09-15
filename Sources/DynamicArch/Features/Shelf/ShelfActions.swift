@@ -45,8 +45,12 @@ enum ShelfActions {
         panel.prompt = "Save Here"
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let destination = panel.url else { return }
+        let root = destination.standardizedFileURL
         for item in items {
-            let target = destination.appendingPathComponent(item.name)
+            let target = root.appendingPathComponent(item.name).standardizedFileURL
+            // The name originates from another app's pasteboard; prove the
+            // write lands in the folder the user actually chose.
+            guard target.path.hasPrefix(root.path + "/") else { continue }
             try? FileManager.default.copyItem(at: item.url, to: target)
         }
         Haptics.success()

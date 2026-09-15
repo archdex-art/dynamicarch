@@ -256,12 +256,35 @@ final class AppsStore {
 
     // MARK: - Actions
 
+    /// Re-resolves a row to a live process, and only returns it if it is
+    /// still the *same* process.
+    ///
+    /// A `pid_t` captured at refresh time is not a stable identity: the target
+    /// can exit and macOS can hand its PID to something else - which matters
+    /// most in `quitThenForce`, where four seconds elapse before the
+    /// escalation. Without this check the protected/critical list could be
+    /// bypassed and an unrelated app SIGKILLed.
+    private func resolve(_ entry: Entry) -> NSRunningApplication? {
+        guard let app = NSRunningApplication(processIdentifier: entry.id), !app.isTerminated else { return nil }
+        guard app.bundleIdentifier == entry.bundleIdentifier else { return nil }
+        guard app.launchDate == entry.launchDate else { return nil }
+        return app
+    }
+
+    /// Protection is re-evaluated against the live process, never the cached
+    /// record, so a recycled PID cannot inherit another app's exemption.
+    private func isProtectedNow(_ app: NSRunningApplication) -> Bool {
+        guard let bundleIdentifier = app.bundleIdentifier else { return false }
+        return Self.criticalBundleIdentifiers.contains(bundleIdentifier)
+            || Preferences.shared.protectedBundleIdentifiers.contains(bundleIdentifier)
+    }
+
     func activate(_ entry: Entry) {
-        NSRunningApplication(processIdentifier: entry.id)?.activate(options: [.activateAllWindows])
+        resolve(entry)?.activate(options: [.activateAllWindows])
     }
 
     func hide(_ entry: Entry) {
-        NSRunningApplication(processIdentifier: entry.id)?.hide()
+        resolve(entry)?.hide()
         refresh()
     }
 
@@ -273,7 +296,11 @@ final class AppsStore {
             lastActionMessage = "\(entry.name) is required by macOS"
             return false
         }
-        guard let app = NSRunningApplication(processIdentifier: entry.id) else { return false }
+        guard let app = resolve(entry) else {
+            lastActionMessage = "\(entry.name) is no longer running"
+            refresh()
+            return false
+        }
         let quit = app.terminate()
         lastActionMessage = quit ? "Quitting \(entry.name)…" : "\(entry.name) refused to quit"
         Haptics.tap()
@@ -292,7 +319,15 @@ final class AppsStore {
             lastActionMessage = "\(entry.name) is protected"
             return false
         }
-        guard let app = NSRunningApplication(processIdentifier: entry.id) else { return false }
+        guard let app = resolve(entry) else {
+            lastActionMessage = "\(entry.name) is no longer running"
+            refresh()
+            return false
+        }
+        guard !isProtectedNow(app), Self.criticalBundleIdentifiers.contains(app.bundleIdentifier ?? "") == false else {
+            lastActionMessage = "\(app.localizedName ?? entry.name) is protected"
+            return false
+        }
         let killed = app.forceTerminate()
         lastActionMessage = killed ? "Force quit \(entry.name)" : "Could not force quit \(entry.name)"
         Haptics.success()
@@ -305,10 +340,7 @@ final class AppsStore {
     func quitThenForce(_ entry: Entry, grace: TimeInterval = 4) {
         guard quit(entry) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + grace) { [weak self] in
-            guard let self,
-                  let app = NSRunningApplication(processIdentifier: entry.id),
-                  app.isTerminated == false
-            else { return }
+            guard let self, self.resolve(entry) != nil else { return }
             _ = forceQuit(entry)
         }
     }

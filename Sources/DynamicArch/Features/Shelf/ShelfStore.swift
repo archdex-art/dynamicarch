@@ -27,8 +27,12 @@ final class ShelfStore {
     private let root: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DynamicArch/Shelf", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
+        // Owner-only: staged files are whatever the user dragged in, which can
+        // be anything, and the default umask would leave them group readable.
+        try? FileManager.default.createDirectory(at: base,
+                                                 withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        return base.standardizedFileURL
     }()
 
     private var indexURL: URL { root.appendingPathComponent("index.json") }
@@ -132,10 +136,49 @@ final class ShelfStore {
         }
     }
 
+    /// Turns a name from a pasteboard into a single, safe path component.
+    ///
+    /// Everything here arrives from another application: a drag can carry a
+    /// file called `..`, one with slashes or colons in it, one starting with a
+    /// dot, or one long enough to break the file system. Appending such a name
+    /// to our storage directory would write outside it.
+    private nonisolated static func safeComponent(_ proposed: String, fallback: String) -> String {
+        var name = proposed
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        name = String(String.UnicodeScalarView(name.unicodeScalars.filter { !$0.properties.isDefaultIgnorableCodePoint && $0.value >= 0x20 }))
+        name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        while name.hasPrefix(".") { name.removeFirst() }
+        if name.isEmpty || name == ".." { name = fallback }
+        // HFS+/APFS allow 255 UTF-8 bytes per component; leave room for a
+        // uniquing suffix.
+        if name.utf8.count > 200 {
+            name = String(name.prefix(120))
+        }
+        return name
+    }
+
     private nonisolated static func materialise(_ source: IngestSource, root: URL, copying: Bool) throws -> ShelfItem {
         let fileManager = FileManager.default
         let id = UUID()
         let directory = root.appendingPathComponent(id.uuidString, isDirectory: true)
+
+        /// Builds a destination and proves it stays inside this item's own
+        /// directory before anything is written.
+        func destination(named proposed: String, fallback: String) throws -> (name: String, url: URL) {
+            let name = safeComponent(proposed, fallback: fallback)
+            let url = directory.appendingPathComponent(name).standardizedFileURL
+            guard url.path.hasPrefix(directory.standardizedFileURL.path + "/") else {
+                throw CocoaError(.fileWriteInvalidFileName)
+            }
+            return (name, url)
+        }
+
+        func makeDirectory() throws {
+            try fileManager.createDirectory(at: directory,
+                                            withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])
+        }
 
         func finish(name: String, destination: URL, original: URL?, reference: Bool) throws -> ShelfItem {
             let attributes = try? fileManager.attributesOfItem(atPath: destination.path)
@@ -157,42 +200,44 @@ final class ShelfStore {
                 throw CocoaError(.fileNoSuchFile)
             }
             if !copying {
-                return try finish(name: url.lastPathComponent, destination: url, original: url, reference: true)
+                // Sanitised here too: the name travels onward into Save a Copy
+                // and into the drag-out provider's suggested filename, where
+                // the receiving app resolves it as a path component.
+                return try finish(name: safeComponent(url.lastPathComponent, fallback: "File"),
+                                  destination: url,
+                                  original: url,
+                                  reference: true)
             }
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            let destination = directory.appendingPathComponent(url.lastPathComponent)
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
+            try makeDirectory()
+            let target = try destination(named: url.lastPathComponent, fallback: "File")
+            if fileManager.fileExists(atPath: target.url.path) {
+                try fileManager.removeItem(at: target.url)
             }
-            try fileManager.copyItem(at: url, to: destination)
-            return try finish(name: url.lastPathComponent, destination: destination, original: url, reference: false)
+            try fileManager.copyItem(at: url, to: target.url)
+            return try finish(name: target.name, destination: target.url, original: url, reference: false)
 
         case .imageData(let data, let type):
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try makeDirectory()
             let stamp = Self.stampFormatter.string(from: .now)
-            let name = "Image \(stamp).\(type.preferredFilenameExtension ?? "png")"
-            let destination = directory.appendingPathComponent(name)
-            try data.write(to: destination)
-            return try finish(name: name, destination: destination, original: nil, reference: false)
+            let target = try destination(named: "Image \(stamp).\(type.preferredFilenameExtension ?? "png")",
+                                         fallback: "Image.png")
+            try data.write(to: target.url, options: .atomic)
+            return try finish(name: target.name, destination: target.url, original: nil, reference: false)
 
         case .text(let text):
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try makeDirectory()
             let firstLine = text.split(separator: "\n").first.map(String.init) ?? "Text"
-            let trimmed = String(firstLine.prefix(40)).replacingOccurrences(of: "/", with: "-")
-            let name = "\(trimmed.isEmpty ? "Text" : trimmed).txt"
-            let destination = directory.appendingPathComponent(name)
-            try text.write(to: destination, atomically: true, encoding: .utf8)
-            return try finish(name: name, destination: destination, original: nil, reference: false)
+            let target = try destination(named: "\(String(firstLine.prefix(40))).txt", fallback: "Text.txt")
+            try text.write(to: target.url, atomically: true, encoding: .utf8)
+            return try finish(name: target.name, destination: target.url, original: nil, reference: false)
 
         case .link(let url):
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            let host = url.host ?? "Link"
-            let name = "\(host).webloc"
-            let destination = directory.appendingPathComponent(name)
+            try makeDirectory()
+            let target = try destination(named: "\(url.host ?? "Link").webloc", fallback: "Link.webloc")
             let plist: [String: Any] = ["URL": url.absoluteString]
             let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
-            try data.write(to: destination)
-            return try finish(name: name, destination: destination, original: nil, reference: false)
+            try data.write(to: target.url, options: .atomic)
+            return try finish(name: target.name, destination: target.url, original: nil, reference: false)
         }
     }
 
@@ -226,8 +271,12 @@ final class ShelfStore {
     /// merely reference a file the user already owns are left alone.
     private func discardStorage(for item: ShelfItem) {
         guard !item.isReference else { return }
+        // Resolve before comparing: a symlink planted inside our storage would
+        // otherwise pass a plain prefix check and send the delete elsewhere.
         let container = item.url.deletingLastPathComponent()
-        guard container.path.hasPrefix(root.path), container.path != root.path else { return }
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        guard container.path.hasPrefix(root.path + "/"), container.path != root.path else { return }
         do {
             try fileManager.trashItem(at: container, resultingItemURL: nil)
         } catch {
@@ -301,6 +350,26 @@ final class ShelfStore {
         guard let data = try? Data(contentsOf: indexURL),
               let decoded = try? JSONDecoder().decode([ShelfItem].self, from: data)
         else { return }
-        items = decoded.filter { fileManager.fileExists(atPath: $0.storedPath) }
+        // The index is just a file on disk. A copied item must still live
+        // inside our own storage, or a tampered index could point delete and
+        // "reveal" actions at arbitrary paths.
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        items = decoded.compactMap { item in
+            guard fileManager.fileExists(atPath: item.storedPath) else { return nil }
+            let resolved = item.url.resolvingSymlinksInPath().standardizedFileURL
+            if item.isReference {
+                // References point outside our storage by design, but the index
+                // is an ordinary file any user process can rewrite. Keep them
+                // inside the user's home, and re-derive the displayed name from
+                // the real path so a tampered entry cannot label /etc/ssh keys
+                // as "invoice.pdf".
+                guard resolved.path.hasPrefix(home + "/") else { return nil }
+                var sanitised = item
+                sanitised.name = Self.safeComponent(resolved.lastPathComponent, fallback: "File")
+                return sanitised
+            }
+            guard resolved.path.hasPrefix(root.path + "/") else { return nil }
+            return item
+        }
     }
 }

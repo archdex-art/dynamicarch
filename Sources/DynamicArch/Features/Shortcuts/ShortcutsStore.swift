@@ -44,9 +44,13 @@ final class ShortcutsStore {
     }
 
     func run(_ name: String) {
+        // Only run something we actually listed, and pass "--" so a shortcut
+        // named "--output-path=..." is treated as a name rather than as
+        // options for the CLI.
+        guard names.contains(name) else { return }
         isRunning = name
         Task.detached(priority: .userInitiated) {
-            _ = Self.run(["run", name])
+            _ = Self.run(["run", "--", name])
             await MainActor.run { [weak self] in
                 self?.isRunning = nil
                 Haptics.success()

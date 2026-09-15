@@ -44,7 +44,7 @@ final class IslandWindowController {
             panel.ignoresMouseEvents = interactive == false
         }
         model.refreshInteractivity()
-        panel.sharingType = Preferences.shared.hideFromScreenCapture ? .none : .readOnly
+        panel.sharingType = Self.excludesFromCapture ? .none : .readOnly
         panel.orderFrontRegardless()
     }
 
@@ -70,7 +70,15 @@ final class IslandWindowController {
     }
 
     func updateCaptureVisibility() {
-        panel.sharingType = Preferences.shared.hideFromScreenCapture ? .none : .readOnly
+        panel.sharingType = Self.excludesFromCapture ? .none : .readOnly
+    }
+
+    /// Mirroring notifications replays other apps' banner text - 2FA codes,
+    /// message previews - inside our own window. That must not end up in a
+    /// screen recording or a shared screen just because the island happens to
+    /// be showing it, so the mirror forces capture exclusion on.
+    static var excludesFromCapture: Bool {
+        Preferences.shared.hideFromScreenCapture || Preferences.shared.notificationsEnabled
     }
 
     /// Raises the panel back above the menu bar. Some system transitions

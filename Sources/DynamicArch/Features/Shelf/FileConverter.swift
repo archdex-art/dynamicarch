@@ -135,7 +135,10 @@ enum FileConverter {
         switch url.pathExtension.lowercased() {
         case "rtf": .rtf
         case "rtfd": .rtfd
-        case "html", "htm": .html
+        // Deliberately *not* .html: AppKit's HTML importer is WebKit backed and
+        // will fetch remote subresources, so converting a dropped page would
+        // quietly make network requests on the user's behalf - and leak that
+        // the file was opened. Imported as plain text instead.
         case "docx": .officeOpenXML
         case "odt": .openDocument
         default: .plain
@@ -177,7 +180,11 @@ enum FileConverter {
     private static func output(for source: URL, extension ext: String) -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DynamicArch", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Converted output is a copy of the user's document; keep it
+        // owner-only rather than inheriting the umask.
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
         let base = source.deletingPathExtension().lastPathComponent
         var candidate = directory.appendingPathComponent("\(base).\(ext)")
         var counter = 2

@@ -32,8 +32,17 @@ EOF
 openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
     -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/config.cnf" >/dev/null 2>&1
 
-openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
-    -out "$TMP/identity.p12" -passout pass: >/dev/null 2>&1
+# A one-time random passphrase, not an empty one. It only has to survive
+# the few milliseconds between export and import, and never touches disk in
+# readable form - but an empty-password PKCS#12 sitting in a temp directory is
+# a needless window for anything watching that directory.
+PASSPHRASE="$(openssl rand -hex 24)"
+
+# -legacy: OpenSSL 3 defaults to AES-256-CBC with a SHA-256 MAC, which Apple's
+# SecKeychainItemImport rejects outright ("MAC verification failed"). The
+# legacy PBE algorithms are what the Security framework can read.
+openssl pkcs12 -export -legacy -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
+    -out "$TMP/identity.p12" -passout "pass:$PASSPHRASE" >/dev/null 2>&1
 
 # Only codesign may use the key without a prompt. Granting /usr/bin/security
 # access as well would let any process running as the user export the private
@@ -41,7 +50,8 @@ openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
 # stealing it means signing a hostile binary that inherits Accessibility,
 # Camera and Location approvals.
 security import "$TMP/identity.p12" -k "$HOME/Library/Keychains/login.keychain-db" \
-    -P "" -T /usr/bin/codesign
+    -P "$PASSPHRASE" -T /usr/bin/codesign
+unset PASSPHRASE
 
 # Note: the certificate is deliberately NOT added as a trusted code-signing
 # root. codesign does not need the certificate to be trusted in order to sign;

@@ -14,7 +14,7 @@ enum IslandStage: Equatable {
 }
 
 enum IslandTab: String, CaseIterable, Identifiable, Codable {
-    case home, timer, shelf, apps, clipboard, calendar, mirror
+    case home, timer, equalizer, shelf, apps, clipboard, calendar, mirror
 
     var id: String { rawValue }
 
@@ -22,6 +22,7 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .home: "rectangle.on.rectangle.angled"
         case .timer: "timer"
+        case .equalizer: "slider.vertical.3"
         case .shelf: "tray.full"
         case .apps: "square.stack.3d.up"
         case .clipboard: "doc.on.clipboard"
@@ -35,7 +36,10 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
     var hasScrollableContent: Bool {
         switch self {
         case .apps, .clipboard, .calendar: true
-        case .home, .timer, .shelf, .mirror: false
+        // The equaliser's bands are dragged vertically, but the section
+        // itself does not scroll: a two-finger scroll over it should still
+        // close the island, exactly like Home.
+        case .home, .timer, .equalizer, .shelf, .mirror: false
         }
     }
 
@@ -43,6 +47,7 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .home: "Home"
         case .timer: "Timer"
+        case .equalizer: "Equaliser"
         case .shelf: "Shelf"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
@@ -157,6 +162,7 @@ final class IslandModel {
     var availableTabs: [IslandTab] {
         var list: [IslandTab] = [.home]
         if Preferences.shared.timerEnabled { list.append(.timer) }
+        if Preferences.shared.equalizerEnabled { list.append(.equalizer) }
         if Preferences.shared.shelfEnabled { list.append(.shelf) }
         if Preferences.shared.appsEnabled { list.append(.apps) }
         if Preferences.shared.clipboardEnabled { list.append(.clipboard) }
@@ -345,7 +351,9 @@ final class IslandModel {
         case .open:
             let height = switch tab {
             case .home: Layout.openHeight
-            case .apps: Layout.openExtraTallHeight
+            // Both need the taller panel: one for a scrolling list, the other
+            // for full-travel band sliders with labels above and below.
+            case .apps, .equalizer: Layout.openExtraTallHeight
             default: Layout.openTallHeight
             }
             let width = Layout.openWidth

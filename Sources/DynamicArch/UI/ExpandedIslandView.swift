@@ -45,6 +45,8 @@ struct ExpandedIslandView: View {
             HomeTabView(model: model, morph: morph).transition(slide)
         case .timer:
             TimerTabView(model: model).transition(slide)
+        case .equalizer:
+            EqualizerTabView().transition(slide)
         case .shelf:
             ShelfTabView(model: model).transition(slide)
         case .apps:

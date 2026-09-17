@@ -67,8 +67,14 @@ echo "==> Signing"
 # A stable signing identity keeps TCC grants (camera, calendar, location)
 # across rebuilds. Scripts/make-signing-identity.sh creates one; without it we
 # fall back to ad-hoc, which re-prompts for permissions on every build.
+# Note: no -v. The local identity is deliberately not installed as a trusted
+# code-signing root, so `find-identity -v` reports it as invalid and omits it -
+# but codesign signs with it perfectly well, and a stable signature is what
+# keeps the app's Accessibility and Camera approvals across rebuilds. Ad-hoc is
+# the fallback, and ad-hoc changes identity on every build, which makes macOS
+# revoke those grants each time.
 IDENTITY="-"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "DynamicArch Developer"; then
+if security find-identity -p codesigning 2>/dev/null | grep -q "DynamicArch Developer"; then
     IDENTITY="DynamicArch Developer"
 fi
 # Hardened runtime, with only the entitlements the app uses. Without it any

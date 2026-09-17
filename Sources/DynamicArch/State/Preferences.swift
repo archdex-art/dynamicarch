@@ -60,6 +60,15 @@ final class Preferences {
     var bluetoothEnabled = false { didSet { persist(\.bluetoothEnabled) } }
     var mirrorEnabled = false { didSet { persist(\.mirrorEnabled) } }
     var timerEnabled = true { didSet { persist(\.timerEnabled) } }
+    var equalizerEnabled = true { didSet { persist(\.equalizerEnabled) } }
+    /// The equaliser curve. Stored as JSON rather than as a dozen scalar keys
+    /// so a band count change cannot leave a half-migrated curve behind.
+    var equalizerState = EqualizerState() {
+        didSet {
+            guard loaded, let data = try? JSONEncoder().encode(equalizerState) else { return }
+            defaults.set(data, forKey: "equalizerState")
+        }
+    }
     var appsEnabled = true { didSet { persist(\.appsEnabled) } }
     /// Apps that bulk quit and force quit must never touch.
     var protectedBundleIdentifiers: [String] = [] {
@@ -116,6 +125,7 @@ final class Preferences {
         \Preferences.bluetoothEnabled: "bluetoothEnabled",
         \Preferences.mirrorEnabled: "mirrorEnabled",
         \Preferences.timerEnabled: "timerEnabled",
+        \Preferences.equalizerEnabled: "equalizerEnabled",
         \Preferences.notificationsEnabled: "notificationsEnabled",
         \Preferences.dismissSystemBanners: "dismissSystemBanners",
         \Preferences.shelfRetentionHours: "shelfRetentionHours",
@@ -156,6 +166,11 @@ final class Preferences {
         bluetoothEnabled = bool("bluetoothEnabled", false)
         mirrorEnabled = bool("mirrorEnabled", false)
         timerEnabled = bool("timerEnabled", true)
+        equalizerEnabled = bool("equalizerEnabled", true)
+        if let data = defaults.data(forKey: "equalizerState"),
+           let decoded = try? JSONDecoder().decode(EqualizerState.self, from: data) {
+            equalizerState = decoded.normalised
+        }
         notificationsEnabled = bool("notificationsEnabled", false)
         dismissSystemBanners = bool("dismissSystemBanners", false)
         shelfRetentionHours = defaults.object(forKey: "shelfRetentionHours") as? Int ?? 24

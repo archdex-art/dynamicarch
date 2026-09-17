@@ -297,6 +297,10 @@ private struct FeatureSettings: View {
             }
             Section("Panels") {
                 Toggle("Timer", isOn: $preferences.timerEnabled)
+                Toggle("Equaliser", isOn: $preferences.equalizerEnabled)
+                Text("Drives Apple Music's own ten-band equaliser. macOS has no system-wide audio equaliser for apps to use, so other players are unaffected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("File shelf", isOn: $preferences.shelfEnabled)
                 Toggle("Clipboard history", isOn: $preferences.clipboardEnabled)
                 Toggle("Calendar", isOn: $preferences.calendarEnabled)

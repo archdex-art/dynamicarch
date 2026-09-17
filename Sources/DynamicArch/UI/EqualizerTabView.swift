@@ -519,11 +519,20 @@ private struct ResponseCurve: Shape {
 
         var path = Path()
         path.move(to: points[0])
-        for index in 0..<(points.count - 1) {
-            let p0 = points[max(index - 1, 0)]
+        let last = points.count - 1
+        for index in 0..<last {
             let p1 = points[index]
             let p2 = points[index + 1]
-            let p3 = points[min(index + 2, points.count - 1)]
+            // The shoulder segments are drawn flat. A spline through them
+            // borrows its tangent from the second band, which bows the curve
+            // above its own starting level before it has left the edge - a
+            // visible overshoot that claims gain the band does not have.
+            if index == 0 || index == last - 1 {
+                path.addLine(to: p2)
+                continue
+            }
+            let p0 = points[max(index - 1, 0)]
+            let p3 = points[min(index + 2, last)]
             // Catmull-Rom to Bezier: tangents are a sixth of the neighbouring
             // span, which is the uniform form of the spline.
             let control1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)

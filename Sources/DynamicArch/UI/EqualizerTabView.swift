@@ -436,32 +436,37 @@ private struct PreampSlider: View {
                 .foregroundStyle(Palette.secondaryText)
 
             GeometryReader { geometry in
+                // One mapping for every part of the control. The knob used to
+                // be placed by an offset from the leading edge while the fill
+                // was placed from the centre, so the two only agreed at 0 dB
+                // and drifted apart as the value moved.
                 let width = geometry.size.width
                 let span = EqualizerState.gainRange.upperBound - EqualizerState.gainRange.lowerBound
-                let fraction = (value - EqualizerState.gainRange.lowerBound) / span
-                // Fill runs from the centre, like the bands: a preamp of 0 dB
-                // drawn as a half-full bar reads as "half volume", which it is
-                // not.
-                let centre = width / 2
-                let offset = CGFloat(value / span) * width
+                let zero = width / 2
+                let x = zero + CGFloat(value / span) * width
+                let midY = geometry.size.height / 2
 
-                ZStack(alignment: .leading) {
+                ZStack {
                     Capsule()
                         .fill(.white.opacity(0.07))
-                        .frame(height: 3)
+                        .frame(width: width, height: 3)
+                        .position(x: zero, y: midY)
+                    // Fill runs from the centre, like the bands: a preamp of
+                    // 0 dB drawn as a half-full bar reads as "half volume",
+                    // which it is not.
                     Capsule()
                         .fill(Palette.accent.opacity(0.75))
-                        .frame(width: abs(offset), height: 3)
-                        .offset(x: offset < 0 ? centre + offset : centre)
+                        .frame(width: abs(x - zero), height: 3)
+                        .position(x: (x + zero) / 2, y: midY)
                     Circle()
                         .fill(.white)
                         .frame(width: 9, height: 9)
                         .shadow(color: .black.opacity(0.3), radius: 1.5, y: 0.5)
-                        .offset(x: CGFloat(fraction) * width - 4.5)
                         .scaleEffect(hovering ? 1.2 : 1)
                         .animation(Motion.press, value: hovering)
+                        .position(x: x, y: midY)
                 }
-                .frame(maxHeight: .infinity)
+                .frame(width: width, height: geometry.size.height)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 1)
@@ -476,10 +481,15 @@ private struct PreampSlider: View {
             }
             .frame(height: 14)
 
+            // Wide enough for the longest reading ("-11.5 dB") and fixed, so
+            // the slider beside it does not resize as the number changes.
             Text("\(BandSlider.format(value)) dB")
                 .font(Typography.mono)
+                .monospacedDigit()
                 .foregroundStyle(Palette.tertiaryText)
-                .frame(width: 46, alignment: .trailing)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: 62, alignment: .trailing)
         }
     }
 }

@@ -35,12 +35,54 @@ the original moves; drag them back out one at a time or as a stack, AirDrop
 them, Quick Look them, or convert them (image formats, PDF, audio extraction,
 video transcode) without leaving the island.
 
+**Running apps** - Every app with its live CPU and memory, sorted by weight,
+with hung apps flagged as *Not responding*. Quitting is graceful by default, so
+macOS still offers to save your work; **Force quit** is a separate action that
+always confirms and warns harder when the target is healthy, because killing a
+working app is how data gets lost. System-critical processes can never be
+force-quit, any app can be shielded from bulk actions, **Quit All** is staggered
+so fifty apps do not throw fifty save dialogs at once, and idle apps can be
+quit automatically after a period you choose - always by the graceful path.
+
+**Equaliser** - A ten-band graphic equaliser in the island, with a response
+curve that morphs between presets, bands you can drag, a preamp trim, and nine
+presets (Vocals, Bass, Treble, Loudness, Acoustic, Speech, Late Night, Piano,
+Flat).
+
+It drives **Apple Music's own equaliser**, and says so in the UI. macOS has no
+public system-wide audio equaliser, so the only honest options for a
+third-party app are to install a CoreAudio driver - an admin-installed HAL
+plug-in that can take the whole audio stack down with it - or to drive a
+player's own unit. This does the latter, through Accessibility: Music's Apple
+Events interface cannot switch its equaliser on or select a preset on macOS 26
+(`-10006`, `-1728`), and band values written over Apple Events are only loaded
+into the engine when a preset is *selected*. Setting the sliders in Music's own
+equaliser window is exactly what a user dragging them does, and it applies
+immediately. The window is parked minimised, because its controls have to exist
+to be driven; the curve is stored in DynamicArch and pushed to Music the moment
+Music appears.
+
 **Clipboard history**, **calendar**, **weather**, **camera mirror**,
 **Shortcuts runner**, and **timers** each get a section.
 
 **Notifications and calls** - With Accessibility access granted, banners are
 mirrored into the island, and incoming calls take it over with working
 Accept/Decline buttons driven through the banner's own controls.
+
+## Themes
+
+Three looks, switchable live in Settings → Appearance:
+
+- **Dark** - black chrome that is indistinguishable from the bezel, so the
+  island vanishes when idle.
+- **Light** - bright chrome with dark text for light desktops.
+- **Glass** - the Dock's own material: a behind-window blur of the desktop and
+  windows underneath, a scrim for density, and a single hair of light around
+  the edge. Nothing is added on top, which is why it reads as a pane rather
+  than a glowing panel - the island simply takes on whatever is behind it.
+
+At rest the island is flat black on every theme, so it still disappears into
+the bezel instead of outlining an empty notch.
 
 ## Build
 

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 
 /// Replaces the system's translucent square with an island activity.
@@ -140,14 +141,36 @@ final class OSDSuppressor {
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastKill > 0.05 else { return }
         lastKill = now
-        Task.detached(priority: .userInitiated) {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-            task.arguments = ["-9", "OSDUIHelper"]
-            task.standardError = FileHandle.nullDevice
-            task.standardOutput = FileHandle.nullDevice
-            try? task.run()
-            task.waitUntilExit()
+        Task.detached(priority: .userInitiated) { Self.signalOSDAgent() }
+    }
+
+    /// Signals the real OSD agent, identified by its executable path.
+    ///
+    /// This used to shell out to `killall -9 OSDUIHelper`, which matches *any*
+    /// of the user's processes by name and denies the agent a chance to clean
+    /// up. Resolving the PID and checking the binary first means we only ever
+    /// signal Apple's agent, and SIGTERM lets it exit properly.
+    private nonisolated static func signalOSDAgent() {
+        var count = proc_listallpids(nil, 0)
+        guard count > 0 else { return }
+        // Headroom for processes started between sizing and reading.
+        count += 64
+        var pids = [pid_t](repeating: 0, count: Int(count))
+        let bytes = proc_listallpids(&pids, Int32(Int(count) * MemoryLayout<pid_t>.size))
+        guard bytes > 0 else { return }
+
+        let found = Int(bytes) / MemoryLayout<pid_t>.size
+        // PROC_PIDPATHINFO_MAXSIZE is not exposed to Swift; it is 4 * MAXPATHLEN.
+        let pathCapacity = 4 * Int(MAXPATHLEN)
+        var path = [CChar](repeating: 0, count: pathCapacity)
+        for index in 0..<found where pids[index] > 0 {
+            let length = proc_pidpath(pids[index], &path, UInt32(pathCapacity))
+            guard length > 0 else { continue }
+            let executable = String(cString: path)
+            guard executable.hasSuffix("/OSDUIHelper"),
+                  executable.hasPrefix("/System/")
+            else { continue }
+            kill(pids[index], SIGTERM)
         }
     }
 }

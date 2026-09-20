@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CryptoKit
 import SwiftUI
 
 /// Mirrors system notification banners - including incoming calls - into the
@@ -94,7 +95,10 @@ final class NotificationMirror {
         let texts = staticTexts(in: window)
         guard !texts.isEmpty else { return }
 
-        let identity = texts.joined(separator: "|")
+        // Hash rather than retain: the dedupe cache would otherwise hold the
+        // plaintext of the last forty banners, which is often the most
+        // sensitive text on the machine.
+        let identity = Self.fingerprint(texts)
         guard !seen.contains(identity) else { return }
         seen.insert(identity)
         if seen.count > 40 { seen.removeAll(keepingCapacity: true) }
@@ -105,10 +109,13 @@ final class NotificationMirror {
         let body = texts.count > 2 ? texts[2...].joined(separator: " ") : nil
 
         let actions = buttons(in: window)
-        let isCall = actions.contains { $0.title.localizedCaseInsensitiveContains("accept") }
-            || appName.localizedCaseInsensitiveContains("facetime")
+        let bundle = bundleIdentifier(for: appName)
+        // Only apps that actually place calls get the call takeover, which
+        // wires buttons to Accept/Decline. Matching on a button titled
+        // "accept" let any app impersonate an incoming call in the island.
+        let isCall = bundle.map(Self.callBundleIdentifiers.contains) ?? false
 
-        let icon = bundleIdentifier(for: appName)
+        let icon = bundle
             .flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0).first?.icon }
 
         if isCall {
@@ -129,8 +136,28 @@ final class NotificationMirror {
         if Preferences.shared.dismissSystemBanners { dismiss(window: window) }
     }
 
+    /// Apps whose banners may be treated as an incoming call.
+    private static let callBundleIdentifiers: Set<String> = [
+        "com.apple.FaceTime",
+        "com.apple.iChat",
+        "com.apple.mobilephone",
+        "us.zoom.xos",
+        "com.microsoft.teams",
+        "com.microsoft.teams2",
+        "com.google.Chrome",          // Meet runs in the browser
+        "com.apple.Safari",
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord",
+        "net.whatsapp.WhatsApp",
+    ]
+
     private func bundleIdentifier(for appName: String) -> String? {
         NSWorkspace.shared.runningApplications.first { $0.localizedName == appName }?.bundleIdentifier
+    }
+
+    private static func fingerprint(_ texts: [String]) -> String {
+        let digest = SHA256.hash(data: Data(texts.joined(separator: "|").utf8))
+        return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
 
     struct BannerAction {
@@ -170,12 +197,16 @@ final class NotificationMirror {
         return result
     }
 
+    /// Dismisses the banner without pressing anything inside it.
+    ///
+    /// The previous version pressed the first button whose *title* contained
+    /// "close", "clear" or "dismiss" - but those titles are free text supplied
+    /// by the notifying app, and pressing an action runs that app's handler.
+    /// A malicious notification could therefore name a destructive action
+    /// "Dismiss" and have it invoked with no user interaction. Cancelling the
+    /// window uses Notification Center's own affordance instead.
     private func dismiss(window: AXUIElement) {
-        for action in buttons(in: window)
-        where ["close", "clear", "dismiss"].contains(where: { action.title.localizedCaseInsensitiveContains($0) }) {
-            action.press()
-            return
-        }
+        AXUIElementPerformAction(window, kAXCancelAction as CFString)
     }
 
     private func copy(_ element: AXUIElement, _ attribute: String) -> Any? {

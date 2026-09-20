@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Signed with the hardened runtime, which blocks DYLD_INSERT_LIBRARIES and
+      task-port attach. That matters more here than in most apps: DynamicArch
+      holds Accessibility, Camera, Calendar and Location grants, so injected
+      code would inherit the most privileged non-root process on the machine.
+
+      Only the entitlements the app actually uses are present, and deliberately
+      NOT com.apple.security.cs.allow-dyld-environment-variables,
+      .disable-library-validation or .allow-unsigned-executable-memory, which
+      would hand back exactly the capability the hardened runtime removes.
+    -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+</dict>
+</plist>

@@ -23,7 +23,11 @@ struct ExpandedIslandView: View {
                         .padding(.top, 2)
                 }
 
-                if model.dropTargeted || (model.dragInFlight && model.tab == .shelf) {
+                if model.shortcutsPickerVisible {
+                    ShortcutsPicker(model: model)
+                        .padding(Metrics.small)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                } else if model.dropTargeted || (model.dragInFlight && model.tab == .shelf) {
                     ShelfDropOverlay(targeted: model.dropTargeted)
                         .padding(10)
                         .transition(.opacity.combined(with: .scale(scale: 0.97)))
@@ -39,8 +43,14 @@ struct ExpandedIslandView: View {
         switch model.tab {
         case .home:
             HomeTabView(model: model, morph: morph).transition(slide)
+        case .timer:
+            TimerTabView(model: model).transition(slide)
+        case .equalizer:
+            EqualizerTabView().transition(slide)
         case .shelf:
             ShelfTabView(model: model).transition(slide)
+        case .apps:
+            AppsTabView(model: model).transition(slide)
         case .clipboard:
             ClipboardTabView().transition(slide)
         case .calendar:

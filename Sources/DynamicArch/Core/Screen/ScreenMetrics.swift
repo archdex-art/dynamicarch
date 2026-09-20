@@ -17,7 +17,7 @@ struct ScreenMetrics: Equatable {
     /// displays we synthesise a pill that mimics one.
     var restingSize: CGSize {
         if let hardwareNotch { return hardwareNotch }
-        return CGSize(width: 190, height: max(menuBarHeight, 24))
+        return CGSize(width: 190, height: max(menuBarHeight, 24).rounded())
     }
 
     var hasHardwareNotch: Bool { hardwareNotch != nil }
@@ -40,11 +40,14 @@ struct ScreenMetrics: Equatable {
         menuBarHeight = screen.menuBarHeight
 
         if let notch = screen.hardwareNotchSize, let left = screen.auxiliaryTopLeftArea {
-            hardwareNotch = notch
-            notchCenterX = left.maxX + notch.width / 2
+            // Round the cutout to whole points: a half-point width makes the
+            // two inverted top corners rasterise differently, which reads as a
+            // crooked island with one visible edge.
+            hardwareNotch = CGSize(width: notch.width.rounded(), height: notch.height.rounded())
+            notchCenterX = (left.maxX + notch.width / 2).rounded()
         } else {
             hardwareNotch = nil
-            notchCenterX = screen.frame.midX
+            notchCenterX = screen.frame.midX.rounded()
         }
     }
 }

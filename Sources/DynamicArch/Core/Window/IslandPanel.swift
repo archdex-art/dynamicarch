@@ -39,8 +39,9 @@ final class IslandPanel: NSPanel {
         animationBehavior = .none
         level = .mainMenu + 3
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        // The island is always dark chrome; it must not follow the system theme.
-        appearance = NSAppearance(named: .darkAqua)
+        // The island's chrome is chosen by the user's theme, never inherited
+        // from the system appearance.
+        appearance = NSAppearance(named: Preferences.shared.theme.appearance)
     }
 
     /// The island never takes key focus: it must not pull the user out of the

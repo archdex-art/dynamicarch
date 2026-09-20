@@ -82,8 +82,10 @@ final class WeatherStore: NSObject, CLLocationManagerDelegate {
 
     func refresh() {
         guard let location = lastLocation else { return }
-        let latitude = location.coordinate.latitude
-        let longitude = location.coordinate.longitude
+        // Two decimals is about a kilometre: enough for local weather, and it
+        // keeps the user's exact position off a third party's servers.
+        let latitude = (location.coordinate.latitude * 100).rounded() / 100
+        let longitude = (location.coordinate.longitude * 100).rounded() / 100
         let unit = usesFahrenheit ? "fahrenheit" : "celsius"
         let endpoint = "https://api.open-meteo.com/v1/forecast?latitude=\(latitude)&longitude=\(longitude)" +
             "&current=temperature_2m,apparent_temperature,is_day,weather_code" +

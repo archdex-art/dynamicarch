@@ -37,7 +37,7 @@ final class IslandStageView: NSView {
     // MARK: - Dragging destination
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        Diagnostics.drag.info("draggingEntered types=\(sender.draggingPasteboard.types?.map(\.rawValue) ?? [], privacy: .public)")
+        Diagnostics.drag.debug("draggingEntered: \(sender.draggingPasteboard.types?.count ?? 0) types")
         guard let model, Preferences.shared.shelfEnabled else { return [] }
         model.beginShelfTargeting()
         return .copy

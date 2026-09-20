@@ -10,34 +10,40 @@ struct IslandButton<Label: View>: View {
     @ViewBuilder let label: Label
 
     @State private var hovering = false
-    @State private var pressed = false
 
     var body: some View {
-        label
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
+        // A real Button, not a tap-gesture stack: a `DragGesture` on the label
+        // recognises the mouse-down and then swallows the click, so the action
+        // never fires. `ButtonStyle` also gives us the pressed state for free.
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            label
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(IslandButtonStyle(size: size, filled: filled, hovering: hovering))
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct IslandButtonStyle: ButtonStyle {
+    let size: CGFloat
+    let filled: Bool
+    let hovering: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
             .background {
                 Circle()
                     .fill(filled ? Palette.controlFillHover : (hovering ? Palette.controlFill : .clear))
             }
-            .scaleEffect(pressed ? 0.88 : (hovering ? 1.06 : 1))
-            .animation(Motion.press, value: pressed)
+            .scaleEffect(configuration.isPressed ? 0.88 : (hovering ? 1.06 : 1))
+            .animation(Motion.press, value: configuration.isPressed)
             .animation(Motion.press, value: hovering)
-            .contentShape(Circle())
-            .onHover { hovering = $0 }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in if !pressed { pressed = true } }
-                    .onEnded { value in
-                        pressed = false
-                        let inBounds = abs(value.translation.width) < size && abs(value.translation.height) < size
-                        if inBounds {
-                            Haptics.tap()
-                            action()
-                        }
-                    }
-            )
     }
 }
 

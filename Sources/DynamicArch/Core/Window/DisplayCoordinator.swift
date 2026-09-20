@@ -68,6 +68,7 @@ final class DisplayCoordinator {
     }
 
     func updateCaptureVisibility() { controller?.updateCaptureVisibility() }
+    func applyTheme() { controller?.applyTheme() }
     private func targetScreen() -> NSScreen? {
         switch Preferences.shared.displayTarget {
         case .builtIn:

@@ -31,6 +31,14 @@ final class Preferences {
     var activitiesEnabled = true { didSet { persist(\.activitiesEnabled) } }
     var gesturesEnabled = true { didSet { persist(\.gesturesEnabled) } }
     var hideFromScreenCapture = false { didSet { persist(\.hideFromScreenCapture) } }
+    var theme: IslandTheme = .dark {
+        didSet {
+            // Mirror into the palette so every view - and the panel itself -
+            // resolves colours against the active theme.
+            Palette.theme = theme
+            persist(\.theme)
+        }
+    }
 
     // Features
     var mediaEnabled = true { didSet { persist(\.mediaEnabled) } }
@@ -51,6 +59,28 @@ final class Preferences {
     /// prompt, which must never appear unasked at launch.
     var bluetoothEnabled = false { didSet { persist(\.bluetoothEnabled) } }
     var mirrorEnabled = false { didSet { persist(\.mirrorEnabled) } }
+    var timerEnabled = true { didSet { persist(\.timerEnabled) } }
+    var equalizerEnabled = true { didSet { persist(\.equalizerEnabled) } }
+    /// The equaliser curve. Stored as JSON rather than as a dozen scalar keys
+    /// so a band count change cannot leave a half-migrated curve behind.
+    var equalizerState = EqualizerState() {
+        didSet {
+            guard loaded, let data = try? JSONEncoder().encode(equalizerState) else { return }
+            defaults.set(data, forKey: "equalizerState")
+        }
+    }
+    var appsEnabled = true { didSet { persist(\.appsEnabled) } }
+    /// Apps that bulk quit and force quit must never touch.
+    var protectedBundleIdentifiers: [String] = [] {
+        didSet { defaults.set(protectedBundleIdentifiers, forKey: "protectedBundleIdentifiers") }
+    }
+    /// Quit apps left untouched for this many minutes. 0 disables it.
+    var autoQuitIdleMinutes = 0 {
+        didSet {
+            persist(\.autoQuitIdleMinutes)
+            AppsStore.shared.reloadAutoQuitSchedule()
+        }
+    }
     var notificationsEnabled = false { didSet { persist(\.notificationsEnabled) } }
     var dismissSystemBanners = false { didSet { persist(\.dismissSystemBanners) } }
 
@@ -76,6 +106,9 @@ final class Preferences {
         \Preferences.activitiesEnabled: "activitiesEnabled",
         \Preferences.gesturesEnabled: "gesturesEnabled",
         \Preferences.hideFromScreenCapture: "hideFromScreenCapture",
+        \Preferences.theme: "theme",
+        \Preferences.appsEnabled: "appsEnabled",
+        \Preferences.autoQuitIdleMinutes: "autoQuitIdleMinutes",
         \Preferences.mediaEnabled: "mediaEnabled",
         \Preferences.mediaVisualizer: "mediaVisualizer",
         \Preferences.mediaCompactWhilePlaying: "mediaCompactWhilePlaying",
@@ -91,6 +124,8 @@ final class Preferences {
         \Preferences.lowBatteryThreshold: "lowBatteryThreshold",
         \Preferences.bluetoothEnabled: "bluetoothEnabled",
         \Preferences.mirrorEnabled: "mirrorEnabled",
+        \Preferences.timerEnabled: "timerEnabled",
+        \Preferences.equalizerEnabled: "equalizerEnabled",
         \Preferences.notificationsEnabled: "notificationsEnabled",
         \Preferences.dismissSystemBanners: "dismissSystemBanners",
         \Preferences.shelfRetentionHours: "shelfRetentionHours",
@@ -110,6 +145,11 @@ final class Preferences {
         activitiesEnabled = bool("activitiesEnabled", true)
         gesturesEnabled = bool("gesturesEnabled", true)
         hideFromScreenCapture = bool("hideFromScreenCapture", false)
+        theme = (defaults.string(forKey: "theme").flatMap(IslandTheme.init)) ?? .dark
+        Palette.theme = theme
+        appsEnabled = bool("appsEnabled", true)
+        protectedBundleIdentifiers = defaults.stringArray(forKey: "protectedBundleIdentifiers") ?? []
+        autoQuitIdleMinutes = defaults.object(forKey: "autoQuitIdleMinutes") as? Int ?? 0
         mediaEnabled = bool("mediaEnabled", true)
         mediaVisualizer = bool("mediaVisualizer", true)
         mediaCompactWhilePlaying = bool("mediaCompactWhilePlaying", true)
@@ -125,6 +165,12 @@ final class Preferences {
         lowBatteryThreshold = defaults.object(forKey: "lowBatteryThreshold") as? Int ?? 20
         bluetoothEnabled = bool("bluetoothEnabled", false)
         mirrorEnabled = bool("mirrorEnabled", false)
+        timerEnabled = bool("timerEnabled", true)
+        equalizerEnabled = bool("equalizerEnabled", true)
+        if let data = defaults.data(forKey: "equalizerState"),
+           let decoded = try? JSONDecoder().decode(EqualizerState.self, from: data) {
+            equalizerState = decoded.normalised
+        }
         notificationsEnabled = bool("notificationsEnabled", false)
         dismissSystemBanners = bool("dismissSystemBanners", false)
         shelfRetentionHours = defaults.object(forKey: "shelfRetentionHours") as? Int ?? 24

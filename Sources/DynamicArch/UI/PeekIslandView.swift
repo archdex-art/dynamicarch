@@ -10,7 +10,9 @@ struct PeekIslandView: View {
 
         HStack(spacing: 0) {
             HStack(spacing: 8) {
-                if let track = model.media.track {
+                if case .timer(let state) = model.compactPresentation {
+                    TimerCompactView(state: state, showsLabel: true)
+                } else if let track = model.media.track {
                     ArtworkView(image: track.artwork, accent: track.accent, cornerRadius: 7)
                         .frame(width: 26, height: 26)
                         .matchedGeometryEffect(id: "artwork", in: morph)
@@ -27,7 +29,9 @@ struct PeekIslandView: View {
 
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
-                if let track = model.media.track, Preferences.shared.mediaVisualizer {
+                if case .timer(let state) = model.compactPresentation {
+                    TimerPeekControls(state: state)
+                } else if let track = model.media.track, Preferences.shared.mediaVisualizer {
                     AudioWaveform(accent: track.accent, isActive: track.isPlaying)
                         .frame(width: 24, height: 16)
                 } else if let track = model.media.track {
@@ -47,7 +51,6 @@ struct PeekIslandView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 6)
+        .padding(.horizontal, Metrics.compactInset)
     }
 }

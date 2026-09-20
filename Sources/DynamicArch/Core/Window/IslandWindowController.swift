@@ -44,15 +44,18 @@ final class IslandWindowController {
             panel.ignoresMouseEvents = interactive == false
         }
         model.refreshInteractivity()
-        panel.sharingType = Preferences.shared.hideFromScreenCapture ? .none : .readOnly
+        panel.sharingType = Self.excludesFromCapture ? .none : .readOnly
         panel.orderFrontRegardless()
     }
 
     static func panelFrame(metrics: ScreenMetrics, stageSize: CGSize) -> CGRect {
-        let width = min(stageSize.width, metrics.frame.width)
-        let height = min(stageSize.height, metrics.frame.height)
-        return CGRect(x: metrics.notchCenterX - width / 2,
-                      y: metrics.frame.maxY - height,
+        // Even width keeps the island's centred frame on whole points, and an
+        // integral origin keeps the shape's edges on pixel boundaries.
+        var width = min(stageSize.width, metrics.frame.width).rounded(.down)
+        if width.truncatingRemainder(dividingBy: 2) != 0 { width -= 1 }
+        let height = min(stageSize.height, metrics.frame.height).rounded(.down)
+        return CGRect(x: (metrics.notchCenterX - width / 2).rounded(),
+                      y: (metrics.frame.maxY - height).rounded(),
                       width: width,
                       height: height)
     }
@@ -61,8 +64,21 @@ final class IslandWindowController {
         panel.setFrame(Self.panelFrame(metrics: metrics, stageSize: model.stageSize), display: true)
     }
 
+    func applyTheme() {
+        panel.appearance = NSAppearance(named: Preferences.shared.theme.appearance)
+        panel.contentView?.needsDisplay = true
+    }
+
     func updateCaptureVisibility() {
-        panel.sharingType = Preferences.shared.hideFromScreenCapture ? .none : .readOnly
+        panel.sharingType = Self.excludesFromCapture ? .none : .readOnly
+    }
+
+    /// Mirroring notifications replays other apps' banner text - 2FA codes,
+    /// message previews - inside our own window. That must not end up in a
+    /// screen recording or a shared screen just because the island happens to
+    /// be showing it, so the mirror forces capture exclusion on.
+    static var excludesFromCapture: Bool {
+        Preferences.shared.hideFromScreenCapture || Preferences.shared.notificationsEnabled
     }
 
     /// Raises the panel back above the menu bar. Some system transitions

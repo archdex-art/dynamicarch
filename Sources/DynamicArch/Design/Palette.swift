@@ -1,16 +1,69 @@
 import SwiftUI
 
+/// Semantic colours for the island, resolved against the active theme.
+///
+/// The theme is mirrored into a plain static so every call site - including the
+/// non-UI code that builds activities - can read it without actor hops. The
+/// mirror is written only by `Preferences`, which is the single source of truth.
 enum Palette {
-    /// The island body. Pure black so it is indistinguishable from the bezel on
-    /// notched displays; the subtle top sheen keeps it from looking like a hole
-    /// when it is expanded over bright content.
-    static let body = Color.black
-    static let hairline = Color.white.opacity(0.08)
-    static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.62)
-    static let tertiaryText = Color.white.opacity(0.38)
-    static let controlFill = Color.white.opacity(0.10)
-    static let controlFillHover = Color.white.opacity(0.18)
+    nonisolated(unsafe) static var theme: IslandTheme = .dark
+
+    /// The island body. Black on the dark theme so it is indistinguishable from
+    /// the bezel when idle.
+    static var body: Color {
+        switch theme {
+        case .dark: .black
+        case .light: Color(white: 0.97)
+        case .glass: Color.white.opacity(0.08)
+        }
+    }
+
+    static var hairline: Color {
+        switch theme {
+        case .dark: .white.opacity(0.08)
+        case .light: .black.opacity(0.10)
+        case .glass: .white.opacity(0.28)
+        }
+    }
+
+    static var primaryText: Color {
+        theme.isLight ? Color(white: 0.08) : .white
+    }
+
+    static var secondaryText: Color {
+        theme.isLight ? Color(white: 0.32) : .white.opacity(0.62)
+    }
+
+    static var tertiaryText: Color {
+        theme.isLight ? Color(white: 0.50) : .white.opacity(0.38)
+    }
+
+    static var controlFill: Color {
+        switch theme {
+        case .dark: .white.opacity(0.10)
+        case .light: .black.opacity(0.06)
+        case .glass: .white.opacity(0.16)
+        }
+    }
+
+    static var controlFillHover: Color {
+        switch theme {
+        case .dark: .white.opacity(0.18)
+        case .light: .black.opacity(0.12)
+        case .glass: .white.opacity(0.26)
+        }
+    }
+
+    /// Confirmation sheets need to stay legible over whatever is behind them,
+    /// so they are opaque even on the glass theme.
+    static var confirmationBackground: Color {
+        switch theme {
+        case .dark: Color(white: 0.10)
+        case .light: Color(white: 0.98)
+        case .glass: Color(white: 0.12).opacity(0.96)
+        }
+    }
+
     static let accent = Color(nsColor: .controlAccentColor)
     static let positive = Color(red: 0.20, green: 0.82, blue: 0.44)
     static let warning = Color(red: 1.00, green: 0.72, blue: 0.18)

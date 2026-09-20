@@ -45,8 +45,12 @@ enum ShelfActions {
         panel.prompt = "Save Here"
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let destination = panel.url else { return }
+        let root = destination.standardizedFileURL
         for item in items {
-            let target = destination.appendingPathComponent(item.name)
+            let target = root.appendingPathComponent(item.name).standardizedFileURL
+            // The name originates from another app's pasteboard; prove the
+            // write lands in the folder the user actually chose.
+            guard target.path.hasPrefix(root.path + "/") else { continue }
             try? FileManager.default.copyItem(at: item.url, to: target)
         }
         Haptics.success()
@@ -66,7 +70,7 @@ final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewP
         self.urls = urls
         // Quick Look needs an active app with a key window; an accessory app
         // has neither, so borrow both and hold the island open meanwhile.
-        IslandModel.shared.interactionLock += 1
+        IslandModel.shared.acquireInteractionLock("quicklook")
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         guard let panel = QLPreviewPanel.shared() else { return }
@@ -79,7 +83,7 @@ final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewP
 
     /// Called by the panel when it goes away; hands focus and the island back.
     func endPreviewSession() {
-        IslandModel.shared.interactionLock = max(0, IslandModel.shared.interactionLock - 1)
+        IslandModel.shared.releaseInteractionLock("quicklook")
         if !SettingsWindowController.shared.isVisible {
             NSApp.setActivationPolicy(.accessory)
         }

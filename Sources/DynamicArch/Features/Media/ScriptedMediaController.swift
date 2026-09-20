@@ -34,8 +34,13 @@ final class ScriptedMediaController {
         case "next": script = "tell application \"\(target)\" to next track"
         case "previous": script = "tell application \"\(target)\" to previous track"
         case "seek":
-            let position = (extra["position"] as? Double) ?? 0
-            script = "tell application \"\(target)\" to set player position to \(position)"
+            // Formatted explicitly: interpolating a raw Double would put
+            // "inf" or "nan" straight into the script if a player ever
+            // reported a nonsense duration.
+            let raw = (extra["position"] as? Double) ?? 0
+            let position = raw.isFinite ? min(max(raw, 0), 86_400) : 0
+            script = String(format: "tell application \"%@\" to set player position to %.3f",
+                            target, position)
         default: return
         }
         run(script)

@@ -63,8 +63,19 @@ static BOOL loadMediaRemote(void) {
 }
 
 static void emit(NSDictionary *object) {
-    NSError *error = nil;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:object options:0 error:&error];
+    // NSJSONSerialization *raises* for non-finite numbers rather than
+    // returning nil, and the values below come from whatever app published
+    // now-playing info. Unhandled, one NaN duration would kill the helper and
+    // the supervisor would restart it into a permanent crash loop.
+    if (![NSJSONSerialization isValidJSONObject:object]) return;
+    NSData *data = nil;
+    @try {
+        NSError *error = nil;
+        data = [NSJSONSerialization dataWithJSONObject:object options:0 error:&error];
+    } @catch (NSException *exception) {
+        fprintf(stderr, "serialization failed: %s\n", exception.reason.UTF8String);
+        return;
+    }
     if (!data) return;
     NSMutableData *line = [data mutableCopy];
     [line appendBytes:"\n" length:1];
@@ -89,12 +100,18 @@ static void buildPayload(NSDictionary *info, int pid, NSNumber *isPlaying) {
     if (artist) payload[@"artist"] = artist;
     if (album) payload[@"album"] = album;
 
-    id duration = info[@"kMRMediaRemoteNowPlayingInfoDuration"];
-    id elapsed = info[@"kMRMediaRemoteNowPlayingInfoElapsedTime"];
+    // Only finite numbers cross the wire; a player reporting NaN or infinity
+    // simply omits the field instead of taking the helper down.
+    void (^putNumber)(NSString *, id) = ^(NSString *key, id value) {
+        if (![value isKindOfClass:NSNumber.class]) return;
+        double resolved = [value doubleValue];
+        if (!isfinite(resolved)) return;
+        payload[key] = @(resolved);
+    };
+    putNumber(@"duration", info[@"kMRMediaRemoteNowPlayingInfoDuration"]);
+    putNumber(@"elapsed", info[@"kMRMediaRemoteNowPlayingInfoElapsedTime"]);
+    putNumber(@"rate", info[@"kMRMediaRemoteNowPlayingInfoPlaybackRate"]);
     id rate = info[@"kMRMediaRemoteNowPlayingInfoPlaybackRate"];
-    if (duration) payload[@"duration"] = @([duration doubleValue]);
-    if (elapsed) payload[@"elapsed"] = @([elapsed doubleValue]);
-    if (rate) payload[@"rate"] = @([rate doubleValue]);
 
     id timestamp = info[@"kMRMediaRemoteNowPlayingInfoTimestamp"];
     if ([timestamp isKindOfClass:NSDate.class]) {
@@ -206,23 +223,37 @@ static void handleCommand(NSDictionary *command) {
         };
     });
 
+    // Parameters are class-checked like the command name is: -doubleValue on
+    // an array is an unrecognised selector, and this is a protocol parser.
+    double (^number)(NSString *, double, double) = ^(NSString *key, double low, double high) {
+        id value = command[key];
+        if (![value isKindOfClass:NSNumber.class]) return (double)NAN;
+        double resolved = [value doubleValue];
+        if (!isfinite(resolved) || resolved < low || resolved > high) return (double)NAN;
+        return resolved;
+    };
+
     if ([name isEqualToString:@"seek"]) {
-        if (mrSetElapsed) mrSetElapsed([command[@"position"] doubleValue]);
+        double position = number(@"position", 0, 86400);
+        if (!isnan(position) && mrSetElapsed) mrSetElapsed(position);
         scheduleRefresh();
         return;
     }
     if ([name isEqualToString:@"shuffle"]) {
-        if (mrSetShuffle) mrSetShuffle([command[@"mode"] intValue]);
+        double mode = number(@"mode", 0, 16);
+        if (!isnan(mode) && mrSetShuffle) mrSetShuffle((int)mode);
         scheduleRefresh();
         return;
     }
     if ([name isEqualToString:@"repeat"]) {
-        if (mrSetRepeat) mrSetRepeat([command[@"mode"] intValue]);
+        double mode = number(@"mode", 0, 16);
+        if (!isnan(mode) && mrSetRepeat) mrSetRepeat((int)mode);
         scheduleRefresh();
         return;
     }
     if ([name isEqualToString:@"speed"]) {
-        if (mrSetSpeed) mrSetSpeed([command[@"speed"] floatValue]);
+        double speed = number(@"speed", 0, 8);
+        if (!isnan(speed) && mrSetSpeed) mrSetSpeed((float)speed);
         return;
     }
     if ([name isEqualToString:@"refresh"]) {
@@ -251,6 +282,11 @@ static void readCommands(void) {
         ssize_t count = read(input.fileDescriptor, chunk, sizeof(chunk));
         if (count <= 0) { exit(0); }
         [buffer appendBytes:chunk length:count];
+        // A line that never terminates must not grow without bound.
+        if (buffer.length > 1024 * 1024) {
+            [buffer setLength:0];
+            fprintf(stderr, "dropping oversized command line\n");
+        }
         while (YES) {
             const char *bytes = buffer.bytes;
             NSUInteger newline = NSNotFound;
